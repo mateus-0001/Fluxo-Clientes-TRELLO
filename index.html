@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./config.js"></script>
+</head>
+<body>
+<script>
+  var ICON = window.location.href.replace(/index\.html.*$/, '') + 'icon.svg';
+
+  TrelloPowerUp.initialize({
+    'board-buttons': function (t) {
+      return [{
+        text: 'Entradas x Saídas',
+        icon: { dark: ICON, light: ICON },
+        condition: 'always',
+        callback: function (t) {
+          return t.modal({
+            url: './stats.html',
+            title: 'Entradas x Saídas de clientes',
+            height: 560
+          });
+        }
+      }];
+    }
+  }, { appKey: window.APP_KEY, appName: window.APP_NAME });
+</script>
+</body>
+</html>

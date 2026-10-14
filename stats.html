@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="https://p.trellocdn.com/power-up.css">
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./config.js"></script>
+  <style>
+    body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; padding: 12px; margin: 0; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+    .cards { display: flex; gap: 10px; margin: 12px 0; }
+    .card { flex: 1; border-radius: 8px; padding: 12px; text-align: center; background: #f4f5f7; }
+    .card b { display: block; font-size: 32px; }
+    .in b { color: #216e4e; } .out b { color: #ae2e24; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 6px 8px; border-bottom: 1px solid #dfe1e6; text-align: right; }
+    th:first-child, td:first-child { text-align: left; }
+    .wrap { max-height: 250px; overflow-y: auto; }
+    small { color: #6b778c; }
+    #msg { color: #ae2e24; }
+  </style>
+</head>
+<body>
+  <div id="auth" style="display:none">
+    <p>Para contar as entradas e saídas, o Power-Up precisa de permissão de <b>leitura</b> no seu Trello.</p>
+    <button class="mod-primary" id="btnAuth">Autorizar</button>
+  </div>
+
+  <div id="panel" style="display:none">
+    <div class="row">
+      <label>Período:
+        <select id="periodo">
+          <option value="7">Últimos 7 dias</option>
+          <option value="30" selected>Últimos 30 dias</option>
+          <option value="90">Últimos 90 dias</option>
+          <option value="365">Últimos 12 meses</option>
+        </select>
+      </label>
+      <label>Também contar como saída quem for movido para:
+        <select id="listaSaida"><option value="">(nenhuma lista)</option></select>
+      </label>
+      <button id="btnAtualizar" class="mod-primary">Atualizar</button>
+    </div>
+
+    <div class="cards">
+      <div class="card in">Entradas<b id="nIn">–</b></div>
+      <div class="card out">Saídas<b id="nOut">–</b></div>
+      <div class="card">Saldo<b id="nSaldo">–</b></div>
+    </div>
+    <small>Entrada = card criado, copiado ou vindo de outro board. Saída = card arquivado, excluído, enviado a outro board ou movido para a lista escolhida acima.</small>
+    <p id="msg"></p>
+    <div class="wrap"><table id="tabela"></table></div>
+  </div>
+
+<script>
+  var t = TrelloPowerUp.iframe({ appKey: window.APP_KEY, appName: window.APP_NAME });
+  var FILTER = 'createCard,copyCard,moveCardToBoard,moveCardFromBoard,deleteCard,updateCard:closed,updateCard:idList';
+  var $ = function (id) { return document.getElementById(id); };
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function fmt(d) { return pad(d.getDate()) + '/' + pad(d.getMonth() + 1); }
+
+  async function fetchActions(boardId, since, token) {
+    var all = [], before = null;
+    while (true) {
+      var url = 'https://api.trello.com/1/boards/' + boardId + '/actions?filter=' + FILTER +
+        '&limit=1000&since=' + since.toISOString() +
+        '&key=' + window.APP_KEY + '&token=' + token + (before ? '&before=' + before : '');
+      var r = await fetch(url);
+      if (!r.ok) throw new Error('Erro ' + r.status + ' ao consultar o Trello');
+      var a = await r.json();
+      all = all.concat(a);
+      if (a.length < 1000) break;
+      before = a[a.length - 1].id;
+    }
+    return all;
+  }
+
+  function classify(a, listaSaida) {
+    var d = a.data || {};
+    switch (a.type) {
+      case 'createCard':
+      case 'copyCard':
+      case 'moveCardToBoard': return 'in';
+      case 'moveCardFromBoard':
+      case 'deleteCard': return 'out';
+      case 'updateCard':
+        if (d.old && d.old.closed === false && d.card && d.card.closed === true) return 'out';
+        if (listaSaida && d.listAfter && d.listAfter.id === listaSaida) return 'out';
+        return null;
+    }
+    return null;
+  }
+
+  function bucketKey(date, dias) {
+    var d = new Date(date);
+    if (dias > 31) { // agrupa por semana (segunda-feira)
+      var diff = (d.getDay() + 6) % 7;
+      d.setDate(d.getDate() - diff);
+    }
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }
+
+  async function atualizar() {
+    $('msg').textContent = 'Carregando...';
+    try {
+      var dias = parseInt($('periodo').value, 10);
+      var listaSaida = $('listaSaida').value;
+      await t.set('board', 'shared', 'listaSaida', listaSaida);
+
+      var token = await t.getRestApi().getToken();
+      var boardId = t.getContext().board;
+      var since = new Date(Date.now() - dias * 86400000);
+      var actions = await fetchActions(boardId, since, token);
+
+      actions.sort(function (a, b) { return new Date(a.date) - new Date(b.date); });
+      var buckets = {}, totalIn = 0, totalOut = 0, cardsOut = {};
+
+      actions.forEach(function (a) {
+        var tipo = classify(a, listaSaida);
+        if (!tipo) return;
+        if (tipo === 'out') {
+          var id = a.data && a.data.card && a.data.card.id;
+          if (id && cardsOut[id]) return; // não conta o mesmo card duas vezes
+          if (id) cardsOut[id] = true;
+        }
+        var k = bucketKey(a.date, dias);
+        buckets[k] = buckets[k] || { in: 0, out: 0 };
+        buckets[k][tipo]++;
+        if (tipo === 'in') totalIn++; else totalOut++;
+      });
+
+      $('nIn').textContent = totalIn;
+      $('nOut').textContent = totalOut;
+      var saldo = totalIn - totalOut;
+      $('nSaldo').textContent = (saldo > 0 ? '+' : '') + saldo;
+
+      var rows = '<tr><th>' + (dias > 31 ? 'Semana de' : 'Dia') + '</th><th>Entradas</th><th>Saídas</th><th>Saldo</th></tr>';
+      Object.keys(buckets).map(Number).sort(function (a, b) { return b - a; }).forEach(function (k) {
+        var b = buckets[k], s = b.in - b.out;
+        rows += '<tr><td>' + fmt(new Date(k)) + '</td><td>' + b.in + '</td><td>' + b.out + '</td><td>' + (s > 0 ? '+' : '') + s + '</td></tr>';
+      });
+      $('tabela').innerHTML = rows;
+      $('msg').textContent = '';
+    } catch (e) {
+      $('msg').textContent = e.message;
+    }
+    t.sizeTo('body');
+  }
+
+  async function iniciar() {
+    var api = t.getRestApi();
+    var ok = await api.isAuthorized();
+    $('auth').style.display = ok ? 'none' : 'block';
+    $('panel').style.display = ok ? 'block' : 'none';
+    if (!ok) return;
+
+    var listas = await t.lists('id', 'name');
+    var salva = await t.get('board', 'shared', 'listaSaida', '');
+    listas.forEach(function (l) {
+      var o = document.createElement('option');
+      o.value = l.id; o.textContent = l.name;
+      if (l.id === salva) o.selected = true;
+      $('listaSaida').appendChild(o);
+    });
+    atualizar();
+  }
+
+  $('btnAuth').onclick = function () {
+    t.getRestApi().authorize({ scope: 'read', expiration: 'never' }).then(iniciar);
+  };
+  $('btnAtualizar').onclick = atualizar;
+  $('periodo').onchange = atualizar;
+  $('listaSaida').onchange = atualizar;
+
+  t.render(function () { return iniciar(); });
+</script>
+</body>
+</html>
