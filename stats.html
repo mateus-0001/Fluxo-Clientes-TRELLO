@@ -5,6 +5,7 @@
   <link rel="stylesheet" href="https://p.trellocdn.com/power-up.css">
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./config.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; padding: 12px; margin: 0; }
     .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
@@ -18,6 +19,10 @@
     .wrap { max-height: 250px; overflow-y: auto; }
     small { color: #6b778c; }
     #msg { color: #ae2e24; }
+    details { margin-top: 12px; }
+    summary { cursor: pointer; font-weight: 600; margin-bottom: 6px; }
+    .tag-in { color: #216e4e; font-weight: 600; } .tag-out { color: #ae2e24; font-weight: 600; }
+    #detalhes td, #detalhes th { text-align: left; }
   </style>
 </head>
 <body>
@@ -40,6 +45,7 @@
         <select id="listaSaida"><option value="">(nenhuma lista)</option></select>
       </label>
       <button id="btnAtualizar" class="mod-primary">Atualizar</button>
+      <button id="btnExportar">Exportar Excel</button>
     </div>
 
     <div class="cards">
@@ -50,6 +56,10 @@
     <small>Entrada = card criado, copiado ou vindo de outro board. Saída = card arquivado, excluído, enviado a outro board ou movido para a lista escolhida acima.</small>
     <p id="msg"></p>
     <div class="wrap"><table id="tabela"></table></div>
+    <details>
+      <summary>Ver cards que entraram e saíram (<span id="nCards">0</span>)</summary>
+      <div class="wrap"><table id="detalhes"></table></div>
+    </details>
   </div>
 
 <script>
@@ -76,20 +86,67 @@
     return all;
   }
 
+  var linhas = [], resumoXlsx = [], totais = [0, 0, 0], diasAtual = 30;
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
   function classify(a, listaSaida) {
     var d = a.data || {};
+    var lista = (d.list && d.list.name) || '';
     switch (a.type) {
-      case 'createCard':
-      case 'copyCard':
-      case 'moveCardToBoard': return 'in';
+      case 'createCard': return { tipo: 'in', motivo: 'Criado', lista: lista };
+      case 'copyCard': return { tipo: 'in', motivo: 'Copiado', lista: lista };
+      case 'moveCardToBoard':
+        return { tipo: 'in', motivo: 'Veio de outro board' + (d.boardSource ? ': ' + d.boardSource.name : ''), lista: lista };
       case 'moveCardFromBoard':
-      case 'deleteCard': return 'out';
+        return { tipo: 'out', motivo: 'Enviado a outro board' + (d.boardTarget ? ': ' + d.boardTarget.name : ''), lista: lista };
+      case 'deleteCard': return { tipo: 'out', motivo: 'Excluído', lista: lista };
       case 'updateCard':
-        if (d.old && d.old.closed === false && d.card && d.card.closed === true) return 'out';
-        if (listaSaida && d.listAfter && d.listAfter.id === listaSaida) return 'out';
+        if (d.old && d.old.closed === false && d.card && d.card.closed === true)
+          return { tipo: 'out', motivo: 'Arquivado', lista: lista };
+        if (listaSaida && d.listAfter && d.listAfter.id === listaSaida)
+          return { tipo: 'out', motivo: 'Movido para ' + d.listAfter.name, lista: d.listAfter.name };
         return null;
     }
     return null;
+  }
+
+  function exportar() {
+    if (!linhas.length) { $('msg').textContent = 'Nada para exportar neste período.'; return; }
+    try {
+      var wb = XLSX.utils.book_new();
+
+      var resumo = [[diasAtual > 31 ? 'Semana de' : 'Dia', 'Entradas', 'Saídas', 'Saldo']]
+        .concat(resumoXlsx.slice().reverse())
+        .concat([['TOTAL', totais[0], totais[1], totais[2]]]);
+      var ws1 = XLSX.utils.aoa_to_sheet(resumo);
+      ws1['!cols'] = [{ wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 10 }];
+      XLSX.utils.book_append_sheet(wb, ws1, 'Resumo');
+
+      var det = [['Data', 'Hora', 'Tipo', 'Motivo', 'Card', 'Lista', 'Responsável']];
+      linhas.slice().reverse().forEach(function (l) {
+        var d = new Date(l.date);
+        det.push([
+          pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear(),
+          pad(d.getHours()) + ':' + pad(d.getMinutes()),
+          l.tipo === 'in' ? 'Entrada' : 'Saída',
+          l.motivo, l.card, l.lista, l.quem
+        ]);
+      });
+      var ws2 = XLSX.utils.aoa_to_sheet(det);
+      ws2['!cols'] = [{ wch: 12 }, { wch: 7 }, { wch: 9 }, { wch: 32 }, { wch: 40 }, { wch: 22 }, { wch: 22 }];
+      XLSX.utils.book_append_sheet(wb, ws2, 'Cards');
+
+      var hoje = new Date();
+      XLSX.writeFile(wb, 'fluxo-clientes-' + hoje.getFullYear() + '-' + pad(hoje.getMonth() + 1) + '-' + pad(hoje.getDate()) + '.xlsx');
+      $('msg').textContent = '';
+    } catch (e) {
+      $('msg').textContent = 'Não consegui gerar o Excel: ' + e.message;
+    }
   }
 
   function bucketKey(date, dias) {
@@ -116,10 +173,12 @@
 
       actions.sort(function (a, b) { return new Date(a.date) - new Date(b.date); });
       var buckets = {}, totalIn = 0, totalOut = 0, cardsOut = {};
+      linhas = []; resumoXlsx = []; diasAtual = dias;
 
       actions.forEach(function (a) {
-        var tipo = classify(a, listaSaida);
-        if (!tipo) return;
+        var c = classify(a, listaSaida);
+        if (!c) return;
+        var tipo = c.tipo;
         if (tipo === 'out') {
           var id = a.data && a.data.card && a.data.card.id;
           if (id && cardsOut[id]) return; // não conta o mesmo card duas vezes
@@ -129,8 +188,17 @@
         buckets[k] = buckets[k] || { in: 0, out: 0 };
         buckets[k][tipo]++;
         if (tipo === 'in') totalIn++; else totalOut++;
+        linhas.push({
+          date: a.date,
+          tipo: tipo,
+          motivo: c.motivo,
+          card: (a.data && a.data.card && a.data.card.name) || '(sem nome)',
+          lista: c.lista,
+          quem: (a.memberCreator && a.memberCreator.fullName) || ''
+        });
       });
 
+      totais = [totalIn, totalOut, totalIn - totalOut];
       $('nIn').textContent = totalIn;
       $('nOut').textContent = totalOut;
       var saldo = totalIn - totalOut;
@@ -139,9 +207,20 @@
       var rows = '<tr><th>' + (dias > 31 ? 'Semana de' : 'Dia') + '</th><th>Entradas</th><th>Saídas</th><th>Saldo</th></tr>';
       Object.keys(buckets).map(Number).sort(function (a, b) { return b - a; }).forEach(function (k) {
         var b = buckets[k], s = b.in - b.out;
+        resumoXlsx.unshift([fmt(new Date(k)), b.in, b.out, s]);
         rows += '<tr><td>' + fmt(new Date(k)) + '</td><td>' + b.in + '</td><td>' + b.out + '</td><td>' + (s > 0 ? '+' : '') + s + '</td></tr>';
       });
       $('tabela').innerHTML = rows;
+
+      var det = '<tr><th>Data</th><th>Tipo</th><th>Card</th><th>Motivo</th></tr>';
+      linhas.slice().reverse().forEach(function (l) {
+        var dt = new Date(l.date);
+        det += '<tr><td>' + fmt(dt) + '</td>' +
+          '<td class="' + (l.tipo === 'in' ? 'tag-in' : 'tag-out') + '">' + (l.tipo === 'in' ? 'Entrada' : 'Saída') + '</td>' +
+          '<td>' + esc(l.card) + '</td><td>' + esc(l.motivo) + '</td></tr>';
+      });
+      $('detalhes').innerHTML = det;
+      $('nCards').textContent = linhas.length;
       $('msg').textContent = '';
     } catch (e) {
       $('msg').textContent = e.message;
@@ -171,6 +250,7 @@
     t.getRestApi().authorize({ scope: 'read', expiration: 'never' }).then(iniciar);
   };
   $('btnAtualizar').onclick = atualizar;
+  $('btnExportar').onclick = exportar;
   $('periodo').onchange = atualizar;
   $('listaSaida').onchange = atualizar;
 
