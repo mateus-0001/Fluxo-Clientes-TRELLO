@@ -7,23 +7,27 @@
   <script src="./config.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
+    :root { color-scheme: light; --bg:#ffffff; --fg:#172b4d; --muted:#5e6c84; --card:#f1f2f4; --line:#dfe1e6; --in:#216e4e; --out:#ae2e24; --field:#ffffff; --fieldline:#8590a2; }
+    body.dark { color-scheme: dark; --bg:#1d2125; --fg:#dee4ea; --muted:#9fadbc; --card:#2c333a; --line:#454f59; --in:#4bce97; --out:#f87168; --field:#22272b; --fieldline:#738496; }
     html, body { height: 100%; }
-    body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; padding: 12px; margin: 0; box-sizing: border-box; overflow-y: auto; }
+    body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; padding: 12px; margin: 0; box-sizing: border-box; overflow-y: auto; background: var(--bg); color: var(--fg); }
     .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
-    .row label { display: flex; align-items: center; gap: 4px; }
+    .row label { display: flex; align-items: center; gap: 4px; color: var(--fg); font-weight: 600; }
+    select, input[type=date] { background: var(--field); color: var(--fg); border: 1px solid var(--fieldline); border-radius: 4px; padding: 4px 6px; }
     .cards { display: flex; gap: 10px; margin: 12px 0; }
-    .card { flex: 1; border-radius: 8px; padding: 12px; text-align: center; background: #f4f5f7; }
-    .card b { display: block; font-size: 32px; }
-    .in b { color: #216e4e; } .out b { color: #ae2e24; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th, td { padding: 6px 8px; border-bottom: 1px solid #dfe1e6; text-align: right; }
+    .card { flex: 1; border-radius: 8px; padding: 12px; text-align: center; background: var(--card); color: var(--fg); font-weight: 600; }
+    .card b { display: block; font-size: 32px; color: var(--fg); }
+    .card.in b { color: var(--in); } .card.out b { color: var(--out); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; color: var(--fg); }
+    th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; }
+    th { font-weight: 700; }
     th:first-child, td:first-child { text-align: left; }
     .wrap { padding-bottom: 8px; }
-    small { color: #6b778c; display: block; margin-bottom: 4px; }
-    #msg { color: #ae2e24; }
+    small { color: var(--muted); display: block; margin-bottom: 4px; }
+    #msg { color: var(--out); font-weight: 600; }
     details { margin-top: 12px; }
-    summary { cursor: pointer; font-weight: 600; margin-bottom: 6px; }
-    .tag-in { color: #216e4e; font-weight: 600; } .tag-out { color: #ae2e24; font-weight: 600; }
+    summary { cursor: pointer; font-weight: 700; margin-bottom: 6px; color: var(--fg); }
+    .tag-in { color: var(--in); font-weight: 700; } .tag-out { color: var(--out); font-weight: 700; }
     #detalhes td, #detalhes th, #clientes td, #clientes th { text-align: left; }
     #clientes td.num, #clientes th.num { text-align: right; }
     #custom { display: none; gap: 8px; align-items: center; }
@@ -74,7 +78,7 @@
 
     <details>
       <summary>Tempo de cada cliente no board (<span id="nClientes">0</span>)</summary>
-      <small>Dias da criação do card até a saída. Só entram clientes que saíram no período.</small>
+      <small>Tempo da criação do card até a saída (em minutos, horas ou dias). Só entram clientes que saíram no período.</small>
       <div class="wrap"><table id="clientes"></table></div>
     </details>
 
@@ -190,6 +194,23 @@
     return null;
   }
 
+  // Tempo legível: minutos, horas ou dias, conforme o tamanho
+  function fmtTempo(ms) {
+    var min = Math.round(ms / 60000);
+    if (min < 60) return min + ' min';
+    var h = Math.floor(min / 60), m = min % 60;
+    if (h < 24) return h + ' h' + (m ? ' ' + m + ' min' : '');
+    var d = Math.floor(h / 24); h = h % 24;
+    return d + (d === 1 ? ' dia' : ' dias') + (h ? ' ' + h + ' h' : '');
+  }
+
+  function aplicarTema() {
+    var th = null;
+    try { th = t.getContext().theme; } catch (e) {}
+    if (!th) th = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+    document.body.className = th === 'dark' ? 'dark' : 'light';
+  }
+
   // A data de criação do card está escondida nos 8 primeiros caracteres do ID
   function criacaoCard(id) { return new Date(parseInt(id.substring(0, 8), 16) * 1000); }
 
@@ -230,12 +251,12 @@
       ws1['!cols'] = [{ wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 10 }];
       XLSX.utils.book_append_sheet(wb, ws1, 'Resumo');
 
-      var cli = [['Nº do cliente', 'Nome', 'Card (nome completo)', 'Data de entrada', 'Data de saída', 'Dias no board', 'Motivo da saída']];
+      var cli = [['Nº do cliente', 'Nome', 'Card (nome completo)', 'Data de entrada', 'Data de saída', 'Tempo no board', 'Total em horas', 'Motivo da saída']];
       clientes.slice().sort(function (a, b) { return b.saida - a.saida; }).forEach(function (c) {
-        cli.push([c.numero, c.nome, c.card, fmtFull(c.entrada), fmtFull(c.saida), c.dias, c.motivo]);
+        cli.push([c.numero, c.nome, c.card, fmtFull(c.entrada), fmtFull(c.saida), fmtTempo(c.ms), Math.round(c.ms / 360000) / 10, c.motivo]);
       });
       var ws3 = XLSX.utils.aoa_to_sheet(cli);
-      ws3['!cols'] = [{ wch: 16 }, { wch: 28 }, { wch: 40 }, { wch: 15 }, { wch: 14 }, { wch: 13 }, { wch: 32 }];
+      ws3['!cols'] = [{ wch: 16 }, { wch: 28 }, { wch: 40 }, { wch: 15 }, { wch: 14 }, { wch: 18 }, { wch: 15 }, { wch: 32 }];
       XLSX.utils.book_append_sheet(wb, ws3, 'Tempo por cliente');
 
       var det = [['Data', 'Hora', 'Tipo', 'Motivo', 'Card', 'Lista de origem', 'Lista de destino', 'Responsável']];
@@ -319,7 +340,7 @@
           clientes.push({
             numero: p.numero, nome: p.nome, card: nomeCard,
             entrada: entrada, saida: saida,
-            dias: Math.max(0, Math.round((saida - entrada) / 8640000) / 10), // dias com 1 casa decimal
+            ms: Math.max(0, saida - entrada),
             motivo: c.motivo
           });
         }
@@ -339,10 +360,10 @@
       });
       $('tabela').innerHTML = rows;
 
-      var cli = '<tr><th>Nº</th><th>Nome</th><th>Entrada</th><th>Saída</th><th class="num">Dias</th></tr>';
+      var cli = '<tr><th>Nº</th><th>Nome</th><th>Entrada</th><th>Saída</th><th class="num">Tempo</th></tr>';
       clientes.slice().sort(function (a, b) { return b.saida - a.saida; }).forEach(function (c) {
         cli += '<tr><td>' + esc(c.numero) + '</td><td>' + esc(c.nome || c.card) + '</td><td>' + fmtFull(c.entrada) +
-          '</td><td>' + fmtFull(c.saida) + '</td><td class="num">' + c.dias + '</td></tr>';
+          '</td><td>' + fmtFull(c.saida) + '</td><td class="num">' + fmtTempo(c.ms) + '</td></tr>';
       });
       $('clientes').innerHTML = cli;
       $('nClientes').textContent = clientes.length;
@@ -414,7 +435,13 @@
   $('etiqueta').onchange = atualizar;
   $('listaSaida').onchange = atualizar;
 
-  t.render(function () { return iniciar(); });
+  var iniciado = false;
+  t.render(function () {
+    aplicarTema();
+    if (iniciado) return;
+    iniciado = true;
+    return iniciar();
+  });
 </script>
 </body>
 </html>
