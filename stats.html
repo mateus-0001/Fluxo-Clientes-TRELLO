@@ -7,7 +7,8 @@
   <script src="./config.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
-    body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; padding: 12px; margin: 0; }
+    html, body { height: 100%; }
+    body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; padding: 12px; margin: 0; box-sizing: border-box; overflow-y: auto; }
     .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
     .cards { display: flex; gap: 10px; margin: 12px 0; }
     .card { flex: 1; border-radius: 8px; padding: 12px; text-align: center; background: #f4f5f7; }
@@ -16,7 +17,7 @@
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th, td { padding: 6px 8px; border-bottom: 1px solid #dfe1e6; text-align: right; }
     th:first-child, td:first-child { text-align: left; }
-    .wrap { max-height: 250px; overflow-y: auto; }
+    .wrap { padding-bottom: 8px; }
     small { color: #6b778c; }
     #msg { color: #ae2e24; }
     details { margin-top: 12px; }
@@ -94,22 +95,46 @@
     });
   }
 
+  var boardNomes = {};
+
+  // O Trello só manda o ID do outro board; aqui buscamos o nome pelo ID
+  async function resolverBoards(actions, token) {
+    var ids = {};
+    actions.forEach(function (a) {
+      var d = a.data || {};
+      var b = a.type === 'moveCardFromBoard' ? d.boardTarget : a.type === 'moveCardToBoard' ? d.boardSource : null;
+      if (b && b.id && !b.name) ids[b.id] = true;
+    });
+    await Promise.all(Object.keys(ids).map(async function (id) {
+      if (boardNomes[id]) return;
+      try {
+        var r = await fetch('https://api.trello.com/1/boards/' + id + '?fields=name&key=' + window.APP_KEY + '&token=' + token);
+        if (r.ok) { var j = await r.json(); boardNomes[id] = j.name; }
+      } catch (e) { /* se falhar, fica "undefined" */ }
+    }));
+  }
+
+  function nomeBoard(b) {
+    if (!b) return 'undefined';
+    return b.name || boardNomes[b.id] || 'undefined';
+  }
+
   function classify(a, listaSaida) {
     var d = a.data || {};
     var lista = (d.list && d.list.name) || '';
     switch (a.type) {
-      case 'createCard': return { tipo: 'in', motivo: 'Criado', lista: lista };
-      case 'copyCard': return { tipo: 'in', motivo: 'Copiado', lista: lista };
+      case 'createCard': return { tipo: 'in', motivo: 'Criado', origem: '', destino: lista };
+      case 'copyCard': return { tipo: 'in', motivo: 'Copiado', origem: '', destino: lista };
       case 'moveCardToBoard':
-        return { tipo: 'in', motivo: 'Veio de outro board' + (d.boardSource ? ': ' + d.boardSource.name : ''), lista: lista };
+        return { tipo: 'in', motivo: 'Veio de outro board: ' + nomeBoard(d.boardSource), origem: '', destino: lista };
       case 'moveCardFromBoard':
-        return { tipo: 'out', motivo: 'Enviado a outro board' + (d.boardTarget ? ': ' + d.boardTarget.name : ''), lista: lista };
-      case 'deleteCard': return { tipo: 'out', motivo: 'Excluído', lista: lista };
+        return { tipo: 'out', motivo: 'Enviado a outro board: ' + nomeBoard(d.boardTarget), origem: lista, destino: '' };
+      case 'deleteCard': return { tipo: 'out', motivo: 'Excluído', origem: lista, destino: '' };
       case 'updateCard':
         if (d.old && d.old.closed === false && d.card && d.card.closed === true)
-          return { tipo: 'out', motivo: 'Arquivado', lista: lista };
+          return { tipo: 'out', motivo: 'Arquivado', origem: lista, destino: '' };
         if (listaSaida && d.listAfter && d.listAfter.id === listaSaida)
-          return { tipo: 'out', motivo: 'Movido para ' + d.listAfter.name, lista: d.listAfter.name };
+          return { tipo: 'out', motivo: 'Movido para ' + d.listAfter.name, origem: (d.listBefore && d.listBefore.name) || '', destino: d.listAfter.name };
         return null;
     }
     return null;
@@ -127,18 +152,18 @@
       ws1['!cols'] = [{ wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 10 }];
       XLSX.utils.book_append_sheet(wb, ws1, 'Resumo');
 
-      var det = [['Data', 'Hora', 'Tipo', 'Motivo', 'Card', 'Lista', 'Responsável']];
+      var det = [['Data', 'Hora', 'Tipo', 'Motivo', 'Card', 'Lista de origem', 'Lista de destino', 'Responsável']];
       linhas.slice().reverse().forEach(function (l) {
         var d = new Date(l.date);
         det.push([
           pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear(),
           pad(d.getHours()) + ':' + pad(d.getMinutes()),
           l.tipo === 'in' ? 'Entrada' : 'Saída',
-          l.motivo, l.card, l.lista, l.quem
+          l.motivo, l.card, l.origem, l.destino, l.quem
         ]);
       });
       var ws2 = XLSX.utils.aoa_to_sheet(det);
-      ws2['!cols'] = [{ wch: 12 }, { wch: 7 }, { wch: 9 }, { wch: 32 }, { wch: 40 }, { wch: 22 }, { wch: 22 }];
+      ws2['!cols'] = [{ wch: 12 }, { wch: 7 }, { wch: 9 }, { wch: 32 }, { wch: 40 }, { wch: 22 }, { wch: 22 }, { wch: 22 }];
       XLSX.utils.book_append_sheet(wb, ws2, 'Cards');
 
       var hoje = new Date();
@@ -170,6 +195,7 @@
       var boardId = t.getContext().board;
       var since = new Date(Date.now() - dias * 86400000);
       var actions = await fetchActions(boardId, since, token);
+      await resolverBoards(actions, token);
 
       actions.sort(function (a, b) { return new Date(a.date) - new Date(b.date); });
       var buckets = {}, totalIn = 0, totalOut = 0, cardsOut = {};
@@ -193,7 +219,8 @@
           tipo: tipo,
           motivo: c.motivo,
           card: (a.data && a.data.card && a.data.card.name) || '(sem nome)',
-          lista: c.lista,
+          origem: c.origem,
+          destino: c.destino,
           quem: (a.memberCreator && a.memberCreator.fullName) || ''
         });
       });
@@ -225,7 +252,6 @@
     } catch (e) {
       $('msg').textContent = e.message;
     }
-    t.sizeTo('body');
   }
 
   async function iniciar() {
