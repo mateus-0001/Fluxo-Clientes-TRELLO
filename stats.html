@@ -9,7 +9,8 @@
   <style>
     html, body { height: 100%; }
     body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; padding: 12px; margin: 0; box-sizing: border-box; overflow-y: auto; }
-    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+    .row label { display: flex; align-items: center; gap: 4px; }
     .cards { display: flex; gap: 10px; margin: 12px 0; }
     .card { flex: 1; border-radius: 8px; padding: 12px; text-align: center; background: #f4f5f7; }
     .card b { display: block; font-size: 32px; }
@@ -18,12 +19,14 @@
     th, td { padding: 6px 8px; border-bottom: 1px solid #dfe1e6; text-align: right; }
     th:first-child, td:first-child { text-align: left; }
     .wrap { padding-bottom: 8px; }
-    small { color: #6b778c; }
+    small { color: #6b778c; display: block; margin-bottom: 4px; }
     #msg { color: #ae2e24; }
     details { margin-top: 12px; }
     summary { cursor: pointer; font-weight: 600; margin-bottom: 6px; }
     .tag-in { color: #216e4e; font-weight: 600; } .tag-out { color: #ae2e24; font-weight: 600; }
-    #detalhes td, #detalhes th { text-align: left; }
+    #detalhes td, #detalhes th, #clientes td, #clientes th { text-align: left; }
+    #clientes td.num, #clientes th.num { text-align: right; }
+    #custom { display: none; gap: 8px; align-items: center; }
   </style>
 </head>
 <body>
@@ -40,8 +43,18 @@
           <option value="30" selected>Últimos 30 dias</option>
           <option value="90">Últimos 90 dias</option>
           <option value="365">Últimos 12 meses</option>
+          <option value="custom">Personalizado...</option>
         </select>
       </label>
+      <span id="custom">
+        <label>De <input type="date" id="de"></label>
+        <label>até <input type="date" id="ate"></label>
+      </span>
+      <label>Etiqueta:
+        <select id="etiqueta"><option value="">Todas</option></select>
+      </label>
+    </div>
+    <div class="row">
       <label>Também contar como saída quem for movido para:
         <select id="listaSaida"><option value="">(nenhuma lista)</option></select>
       </label>
@@ -55,8 +68,16 @@
       <div class="card">Saldo<b id="nSaldo">–</b></div>
     </div>
     <small>Entrada = card criado, copiado ou vindo de outro board. Saída = card arquivado, excluído, enviado a outro board ou movido para a lista escolhida acima.</small>
+    <small>Filtro de etiqueta usa as etiquetas que o card tem hoje. Cards excluídos não têm etiqueta e só aparecem em "Todas" ou "Sem etiqueta".</small>
     <p id="msg"></p>
     <div class="wrap"><table id="tabela"></table></div>
+
+    <details>
+      <summary>Tempo de cada cliente no board (<span id="nClientes">0</span>)</summary>
+      <small>Dias da criação do card até a saída. Só entram clientes que saíram no período.</small>
+      <div class="wrap"><table id="clientes"></table></div>
+    </details>
+
     <details>
       <summary>Ver cards que entraram e saíram (<span id="nCards">0</span>)</summary>
       <div class="wrap"><table id="detalhes"></table></div>
@@ -70,9 +91,21 @@
 
   function pad(n) { return String(n).padStart(2, '0'); }
   function fmt(d) { return pad(d.getDate()) + '/' + pad(d.getMonth() + 1); }
+  function fmtFull(d) { return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear(); }
+  function isoDia(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
 
-  async function fetchActions(boardId, since, token) {
-    var all = [], before = null;
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
+  var linhas = [], clientes = [], resumoXlsx = [], totais = [0, 0, 0], spanAtual = 30;
+  var boardNomes = {};
+
+  // ---------- Trello API ----------
+  async function fetchActions(boardId, since, until, token) {
+    var all = [], before = until ? until.toISOString() : null;
     while (true) {
       var url = 'https://api.trello.com/1/boards/' + boardId + '/actions?filter=' + FILTER +
         '&limit=1000&since=' + since.toISOString() +
@@ -87,15 +120,31 @@
     return all;
   }
 
-  var linhas = [], resumoXlsx = [], totais = [0, 0, 0], diasAtual = 30;
-
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
-    });
+  // Etiquetas atuais de cada card (inclui arquivados; cards excluídos não existem mais)
+  async function fetchCardLabels(boardId, token) {
+    var mapa = {}, before = null;
+    while (true) {
+      var url = 'https://api.trello.com/1/boards/' + boardId + '/cards/all?fields=idLabels&limit=1000' +
+        '&key=' + window.APP_KEY + '&token=' + token + (before ? '&before=' + before : '');
+      var r = await fetch(url);
+      if (!r.ok) throw new Error('Erro ' + r.status + ' ao buscar as etiquetas dos cards');
+      var a = await r.json();
+      var novos = 0, menor = null;
+      a.forEach(function (c) {
+        if (!(c.id in mapa)) { mapa[c.id] = c.idLabels || []; novos++; }
+        if (menor === null || c.id < menor) menor = c.id;
+      });
+      if (a.length < 1000 || novos === 0) break;
+      before = menor;
+    }
+    return mapa;
   }
 
-  var boardNomes = {};
+  async function fetchLabels(boardId, token) {
+    var r = await fetch('https://api.trello.com/1/boards/' + boardId + '/labels?fields=name,color&limit=1000&key=' + window.APP_KEY + '&token=' + token);
+    if (!r.ok) return [];
+    return r.json();
+  }
 
   // O Trello só manda o ID do outro board; aqui buscamos o nome pelo ID
   async function resolverBoards(actions, token) {
@@ -119,6 +168,7 @@
     return b.name || boardNomes[b.id] || 'undefined';
   }
 
+  // ---------- Regras ----------
   function classify(a, listaSaida) {
     var d = a.data || {};
     var lista = (d.list && d.list.name) || '';
@@ -140,23 +190,59 @@
     return null;
   }
 
+  // A data de criação do card está escondida nos 8 primeiros caracteres do ID
+  function criacaoCard(id) { return new Date(parseInt(id.substring(0, 8), 16) * 1000); }
+
+  // "1234567890 - NOME" -> { numero: "1234567890", nome: "NOME" }
+  function partirNome(n) {
+    var m = String(n || '').match(/^\s*(\d+)\s*(?:[-–—:]\s*)?(.*)$/);
+    if (m) return { numero: m[1], nome: m[2].trim() };
+    return { numero: '', nome: String(n || '').trim() };
+  }
+
+  function passaEtiqueta(cardId, etiqueta, cardLabels) {
+    if (!etiqueta) return true;
+    var ls = cardId ? cardLabels[cardId] : null;
+    if (etiqueta === '__none__') return !ls || ls.length === 0;
+    return !!ls && ls.indexOf(etiqueta) >= 0;
+  }
+
+  function bucketKey(date, span) {
+    var d = new Date(date);
+    if (span > 31) { // agrupa por semana (segunda-feira)
+      var diff = (d.getDay() + 6) % 7;
+      d.setDate(d.getDate() - diff);
+    }
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }
+
+  // ---------- Excel ----------
   function exportar() {
     if (!linhas.length) { $('msg').textContent = 'Nada para exportar neste período.'; return; }
     try {
       var wb = XLSX.utils.book_new();
 
-      var resumo = [[diasAtual > 31 ? 'Semana de' : 'Dia', 'Entradas', 'Saídas', 'Saldo']]
+      var resumo = [[spanAtual > 31 ? 'Semana de' : 'Dia', 'Entradas', 'Saídas', 'Saldo']]
         .concat(resumoXlsx.slice().reverse())
         .concat([['TOTAL', totais[0], totais[1], totais[2]]]);
       var ws1 = XLSX.utils.aoa_to_sheet(resumo);
       ws1['!cols'] = [{ wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 10 }];
       XLSX.utils.book_append_sheet(wb, ws1, 'Resumo');
 
+      var cli = [['Nº do cliente', 'Nome', 'Card (nome completo)', 'Data de entrada', 'Data de saída', 'Dias no board', 'Motivo da saída']];
+      clientes.slice().sort(function (a, b) { return b.saida - a.saida; }).forEach(function (c) {
+        cli.push([c.numero, c.nome, c.card, fmtFull(c.entrada), fmtFull(c.saida), c.dias, c.motivo]);
+      });
+      var ws3 = XLSX.utils.aoa_to_sheet(cli);
+      ws3['!cols'] = [{ wch: 16 }, { wch: 28 }, { wch: 40 }, { wch: 15 }, { wch: 14 }, { wch: 13 }, { wch: 32 }];
+      XLSX.utils.book_append_sheet(wb, ws3, 'Tempo por cliente');
+
       var det = [['Data', 'Hora', 'Tipo', 'Motivo', 'Card', 'Lista de origem', 'Lista de destino', 'Responsável']];
       linhas.slice().reverse().forEach(function (l) {
         var d = new Date(l.date);
         det.push([
-          pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear(),
+          fmtFull(d),
           pad(d.getHours()) + ':' + pad(d.getMinutes()),
           l.tipo === 'in' ? 'Entrada' : 'Saída',
           l.motivo, l.card, l.origem, l.destino, l.quem
@@ -167,62 +253,76 @@
       XLSX.utils.book_append_sheet(wb, ws2, 'Cards');
 
       var hoje = new Date();
-      XLSX.writeFile(wb, 'fluxo-clientes-' + hoje.getFullYear() + '-' + pad(hoje.getMonth() + 1) + '-' + pad(hoje.getDate()) + '.xlsx');
+      XLSX.writeFile(wb, 'fluxo-clientes-' + isoDia(hoje) + '.xlsx');
       $('msg').textContent = '';
     } catch (e) {
       $('msg').textContent = 'Não consegui gerar o Excel: ' + e.message;
     }
   }
 
-  function bucketKey(date, dias) {
-    var d = new Date(date);
-    if (dias > 31) { // agrupa por semana (segunda-feira)
-      var diff = (d.getDay() + 6) % 7;
-      d.setDate(d.getDate() - diff);
-    }
-    d.setHours(0, 0, 0, 0);
-    return d.getTime();
-  }
-
+  // ---------- Painel ----------
   async function atualizar() {
     $('msg').textContent = 'Carregando...';
     try {
-      var dias = parseInt($('periodo').value, 10);
+      var sel = $('periodo').value, since, until = null;
+      if (sel === 'custom') {
+        var de = $('de').value, ate = $('ate').value;
+        if (!de || !ate) throw new Error('Escolha a data inicial e a final.');
+        since = new Date(de + 'T00:00:00');
+        until = new Date(ate + 'T23:59:59.999');
+        if (since > until) throw new Error('A data inicial é depois da data final.');
+      } else {
+        since = new Date(Date.now() - parseInt(sel, 10) * 86400000);
+      }
+      var span = ((until || new Date()) - since) / 86400000;
       var listaSaida = $('listaSaida').value;
+      var etiqueta = $('etiqueta').value;
       await t.set('board', 'shared', 'listaSaida', listaSaida);
 
       var token = await t.getRestApi().getToken();
       var boardId = t.getContext().board;
-      var since = new Date(Date.now() - dias * 86400000);
-      var actions = await fetchActions(boardId, since, token);
+      var actions = await fetchActions(boardId, since, until, token);
       await resolverBoards(actions, token);
+      var cardLabels = etiqueta ? await fetchCardLabels(boardId, token) : {};
 
       actions.sort(function (a, b) { return new Date(a.date) - new Date(b.date); });
       var buckets = {}, totalIn = 0, totalOut = 0, cardsOut = {};
-      linhas = []; resumoXlsx = []; diasAtual = dias;
+      linhas = []; clientes = []; resumoXlsx = []; spanAtual = span;
 
       actions.forEach(function (a) {
         var c = classify(a, listaSaida);
         if (!c) return;
         var tipo = c.tipo;
+        var card = (a.data && a.data.card) || {};
+        if (!passaEtiqueta(card.id, etiqueta, cardLabels)) return;
         if (tipo === 'out') {
-          var id = a.data && a.data.card && a.data.card.id;
-          if (id && cardsOut[id]) return; // não conta o mesmo card duas vezes
-          if (id) cardsOut[id] = true;
+          if (card.id && cardsOut[card.id]) return; // não conta o mesmo card duas vezes
+          if (card.id) cardsOut[card.id] = true;
         }
-        var k = bucketKey(a.date, dias);
+        var k = bucketKey(a.date, span);
         buckets[k] = buckets[k] || { in: 0, out: 0 };
         buckets[k][tipo]++;
         if (tipo === 'in') totalIn++; else totalOut++;
+        var nomeCard = card.name || '(sem nome)';
         linhas.push({
           date: a.date,
           tipo: tipo,
           motivo: c.motivo,
-          card: (a.data && a.data.card && a.data.card.name) || '(sem nome)',
+          card: nomeCard,
           origem: c.origem,
           destino: c.destino,
           quem: (a.memberCreator && a.memberCreator.fullName) || ''
         });
+        if (tipo === 'out' && card.id) {
+          var entrada = criacaoCard(card.id), saida = new Date(a.date);
+          var p = partirNome(card.name);
+          clientes.push({
+            numero: p.numero, nome: p.nome, card: nomeCard,
+            entrada: entrada, saida: saida,
+            dias: Math.max(0, Math.round((saida - entrada) / 8640000) / 10), // dias com 1 casa decimal
+            motivo: c.motivo
+          });
+        }
       });
 
       totais = [totalIn, totalOut, totalIn - totalOut];
@@ -231,13 +331,21 @@
       var saldo = totalIn - totalOut;
       $('nSaldo').textContent = (saldo > 0 ? '+' : '') + saldo;
 
-      var rows = '<tr><th>' + (dias > 31 ? 'Semana de' : 'Dia') + '</th><th>Entradas</th><th>Saídas</th><th>Saldo</th></tr>';
+      var rows = '<tr><th>' + (span > 31 ? 'Semana de' : 'Dia') + '</th><th>Entradas</th><th>Saídas</th><th>Saldo</th></tr>';
       Object.keys(buckets).map(Number).sort(function (a, b) { return b - a; }).forEach(function (k) {
         var b = buckets[k], s = b.in - b.out;
         resumoXlsx.unshift([fmt(new Date(k)), b.in, b.out, s]);
         rows += '<tr><td>' + fmt(new Date(k)) + '</td><td>' + b.in + '</td><td>' + b.out + '</td><td>' + (s > 0 ? '+' : '') + s + '</td></tr>';
       });
       $('tabela').innerHTML = rows;
+
+      var cli = '<tr><th>Nº</th><th>Nome</th><th>Entrada</th><th>Saída</th><th class="num">Dias</th></tr>';
+      clientes.slice().sort(function (a, b) { return b.saida - a.saida; }).forEach(function (c) {
+        cli += '<tr><td>' + esc(c.numero) + '</td><td>' + esc(c.nome || c.card) + '</td><td>' + fmtFull(c.entrada) +
+          '</td><td>' + fmtFull(c.saida) + '</td><td class="num">' + c.dias + '</td></tr>';
+      });
+      $('clientes').innerHTML = cli;
+      $('nClientes').textContent = clientes.length;
 
       var det = '<tr><th>Data</th><th>Tipo</th><th>Card</th><th>Motivo</th></tr>';
       linhas.slice().reverse().forEach(function (l) {
@@ -269,6 +377,21 @@
       if (l.id === salva) o.selected = true;
       $('listaSaida').appendChild(o);
     });
+
+    try {
+      var token = await api.getToken();
+      var labels = await fetchLabels(t.getContext().board, token);
+      labels.forEach(function (l) {
+        var o = document.createElement('option');
+        o.value = l.id;
+        o.textContent = l.name || (l.color ? '(' + l.color + ', sem nome)' : '(sem nome)');
+        $('etiqueta').appendChild(o);
+      });
+      var sem = document.createElement('option');
+      sem.value = '__none__'; sem.textContent = 'Sem etiqueta';
+      $('etiqueta').appendChild(sem);
+    } catch (e) { /* sem etiquetas, o filtro fica só com "Todas" */ }
+
     atualizar();
   }
 
@@ -277,7 +400,18 @@
   };
   $('btnAtualizar').onclick = atualizar;
   $('btnExportar').onclick = exportar;
-  $('periodo').onchange = atualizar;
+  $('periodo').onchange = function () {
+    var custom = $('periodo').value === 'custom';
+    $('custom').style.display = custom ? 'flex' : 'none';
+    if (custom && !$('de').value) {
+      $('ate').value = isoDia(new Date());
+      $('de').value = isoDia(new Date(Date.now() - 30 * 86400000));
+    }
+    atualizar();
+  };
+  $('de').onchange = atualizar;
+  $('ate').onchange = atualizar;
+  $('etiqueta').onchange = atualizar;
   $('listaSaida').onchange = atualizar;
 
   t.render(function () { return iniciar(); });
