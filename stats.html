@@ -28,12 +28,15 @@
     details { margin-top: 12px; }
     summary { cursor: pointer; font-weight: 700; margin-bottom: 6px; color: var(--fg); }
     .tag-in { color: var(--in); font-weight: 700; } .tag-out { color: var(--out); font-weight: 700; }
-    #detalhes td, #detalhes th, #clientes td, #clientes th { text-align: left; }
+    #detalhes td, #detalhes th, #clientes td, #clientes th, #ignorados td, #ignorados th { text-align: left; }
     #clientes td.num, #clientes th.num { text-align: right; }
     #custom { display: none; gap: 8px; align-items: center; }
+    .topo { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    h2 { margin: 0; font-size: 18px; color: var(--fg); }
   </style>
 </head>
 <body>
+  <div class="topo"><h2>Entradas x Saídas de clientes</h2><button id="btnFechar">Fechar</button></div>
   <div id="auth" style="display:none">
     <p>Para contar as entradas e saídas, o Power-Up precisa de permissão de <b>leitura</b> no seu Trello.</p>
     <button class="mod-primary" id="btnAuth">Autorizar</button>
@@ -62,6 +65,7 @@
       <label>Também contar como saída quem for movido para:
         <select id="listaSaida"><option value="">(nenhuma lista)</option></select>
       </label>
+      <label><input type="checkbox" id="janela" checked> Ignorar cards criados e removidos em até 5 min (provável engano)</label>
       <button id="btnAtualizar" class="mod-primary">Atualizar</button>
       <button id="btnExportar">Exportar Excel</button>
     </div>
@@ -74,12 +78,19 @@
     <small>Entrada = card criado, copiado ou vindo de outro board. Saída = card arquivado, excluído, enviado a outro board ou movido para a lista escolhida acima.</small>
     <small>Filtro de etiqueta usa as etiquetas que o card tem hoje. Cards excluídos não têm etiqueta e só aparecem em "Todas" ou "Sem etiqueta".</small>
     <p id="msg"></p>
+    <small id="avisoIgn"></small>
     <div class="wrap"><table id="tabela"></table></div>
 
     <details>
       <summary>Tempo de cada cliente no board (<span id="nClientes">0</span>)</summary>
       <small>Tempo da criação do card até a saída (em minutos, horas ou dias). Só entram clientes que saíram no período.</small>
       <div class="wrap"><table id="clientes"></table></div>
+    </details>
+
+    <details>
+      <summary>Ignorados por provável engano (<span id="nIgn">0</span>)</summary>
+      <small>Não entram nas contagens. Aparecem aqui para você conferir.</small>
+      <div class="wrap"><table id="ignorados"></table></div>
     </details>
 
     <details>
@@ -104,7 +115,7 @@
     });
   }
 
-  var linhas = [], clientes = [], resumoXlsx = [], totais = [0, 0, 0], spanAtual = 30;
+  var linhas = [], clientes = [], ignorados = [], resumoXlsx = [], totais = [0, 0, 0], spanAtual = 30;
   var boardNomes = {};
 
   // ---------- Trello API ----------
@@ -187,8 +198,12 @@
       case 'updateCard':
         if (d.old && d.old.closed === false && d.card && d.card.closed === true)
           return { tipo: 'out', motivo: 'Arquivado', origem: lista, destino: '' };
+        if (d.old && d.old.closed === true && d.card && d.card.closed === false)
+          return { tipo: 'ret', motivo: 'Desarquivado', origem: '', destino: lista };
         if (listaSaida && d.listAfter && d.listAfter.id === listaSaida)
           return { tipo: 'out', motivo: 'Movido para ' + d.listAfter.name, origem: (d.listBefore && d.listBefore.name) || '', destino: d.listAfter.name };
+        if (listaSaida && d.listBefore && d.listBefore.id === listaSaida && d.listAfter && d.listAfter.id !== listaSaida)
+          return { tipo: 'ret', motivo: 'Saiu da lista de saída', origem: d.listBefore.name, destino: d.listAfter.name };
         return null;
     }
     return null;
@@ -210,6 +225,40 @@
     if (!th) th = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
     document.body.className = th === 'dark' ? 'dark' : 'light';
   }
+
+  // BEGIN processar
+  // Corrige duplicatas e enganos. Recebe os eventos em ordem cronológica:
+  // { id, tipo: 'in' | 'out' | 'ret', when: Date, criacao: Date|null }
+  function processar(lista, janelaMs) {
+    var status = {}, ultimaEntrada = {}, ultimaSaida = {}, out = [];
+    lista.forEach(function (ev) {
+      var id = ev.id, st = status[id];
+      if (ev.tipo === 'in') {
+        if (st === 'in') return; // duplicado (ex.: createCard + copyCard do mesmo card)
+        status[id] = 'in'; ultimaEntrada[id] = ev; out.push(ev);
+      } else if (ev.tipo === 'out') {
+        if (st === 'out') return; // já tinha saído (ex.: arquivou e depois excluiu)
+        status[id] = 'out';
+        var ent = ultimaEntrada[id];
+        ev.ref = ent ? ent.when : (ev.criacao || null);
+        if (janelaMs > 0 && ev.ref && (ev.when - ev.ref) <= janelaMs) {
+          ev.ign = 'Criado, copiado ou recebido e removido em poucos minutos (provável engano)';
+          if (ent && !ent.ign) { ent.ign = ev.ign; ev.pairEntry = ent; }
+        }
+        ultimaSaida[id] = ev; out.push(ev);
+      } else if (ev.tipo === 'ret') {
+        if (st !== 'out') return; // voltou, mas não havia saída registrada no período
+        status[id] = 'in';
+        var se = ultimaSaida[id];
+        if (se) {
+          if (se.pairEntry) { se.pairEntry.ign = null; se.pairEntry = null; } // o card existe, então a entrada vale
+          se.ign = 'Saída desfeita: o card voltou ao board';
+        }
+      }
+    });
+    return out;
+  }
+  // END processar
 
   // A data de criação do card está escondida nos 8 primeiros caracteres do ID
   function criacaoCard(id) { return new Date(parseInt(id.substring(0, 8), 16) * 1000); }
@@ -240,7 +289,7 @@
 
   // ---------- Excel ----------
   function exportar() {
-    if (!linhas.length) { $('msg').textContent = 'Nada para exportar neste período.'; return; }
+    if (!linhas.length && !ignorados.length) { $('msg').textContent = 'Nada para exportar neste período.'; return; }
     try {
       var wb = XLSX.utils.book_new();
 
@@ -273,6 +322,18 @@
       ws2['!cols'] = [{ wch: 12 }, { wch: 7 }, { wch: 9 }, { wch: 32 }, { wch: 40 }, { wch: 22 }, { wch: 22 }, { wch: 22 }];
       XLSX.utils.book_append_sheet(wb, ws2, 'Cards');
 
+      if (ignorados.length) {
+        var ig = [['Data', 'Hora', 'Evento', 'Card', 'O que foi', 'Por que foi ignorado']];
+        ignorados.forEach(function (ev) {
+          var d = ev.when;
+          ig.push([fmtFull(d), pad(d.getHours()) + ':' + pad(d.getMinutes()), ev.tipo === 'in' ? 'Entrada' : 'Saída',
+            ev.card.name || '(sem nome)', ev.c.motivo, ev.ign]);
+        });
+        var ws4 = XLSX.utils.aoa_to_sheet(ig);
+        ws4['!cols'] = [{ wch: 12 }, { wch: 7 }, { wch: 9 }, { wch: 40 }, { wch: 32 }, { wch: 60 }];
+        XLSX.utils.book_append_sheet(wb, ws4, 'Ignorados');
+      }
+
       var hoje = new Date();
       XLSX.writeFile(wb, 'fluxo-clientes-' + isoDia(hoje) + '.xlsx');
       $('msg').textContent = '';
@@ -298,51 +359,62 @@
       var span = ((until || new Date()) - since) / 86400000;
       var listaSaida = $('listaSaida').value;
       var etiqueta = $('etiqueta').value;
-      await t.set('board', 'shared', 'listaSaida', listaSaida);
+      var janelaMs = $('janela').checked ? 5 * 60000 : 0;
+      await t.set('board', 'shared', { listaSaida: listaSaida, janela: $('janela').checked ? '5' : '0' });
 
       var token = await t.getRestApi().getToken();
       var boardId = t.getContext().board;
       var actions = await fetchActions(boardId, since, until, token);
+      var vistos = {};
+      actions = actions.filter(function (a) { if (vistos[a.id]) return false; vistos[a.id] = true; return true; });
       await resolverBoards(actions, token);
       var cardLabels = etiqueta ? await fetchCardLabels(boardId, token) : {};
 
-      actions.sort(function (a, b) { return new Date(a.date) - new Date(b.date); });
-      var buckets = {}, totalIn = 0, totalOut = 0, cardsOut = {};
-      linhas = []; clientes = []; resumoXlsx = []; spanAtual = span;
+      actions.sort(function (a, b) { return new Date(a.date) - new Date(b.date) || (a.id < b.id ? -1 : 1); });
+      linhas = []; clientes = []; ignorados = []; resumoXlsx = []; spanAtual = span;
 
+      var eventos = [];
       actions.forEach(function (a) {
         var c = classify(a, listaSaida);
         if (!c) return;
-        var tipo = c.tipo;
         var card = (a.data && a.data.card) || {};
         if (!passaEtiqueta(card.id, etiqueta, cardLabels)) return;
-        if (tipo === 'out') {
-          if (card.id && cardsOut[card.id]) return; // não conta o mesmo card duas vezes
-          if (card.id) cardsOut[card.id] = true;
-        }
+        eventos.push({
+          a: a, c: c, card: card, tipo: c.tipo, when: new Date(a.date),
+          id: card.id || ('sem-id-' + a.id),
+          criacao: card.id ? criacaoCard(card.id) : null,
+          ign: null
+        });
+      });
+
+      var contados = [];
+      processar(eventos, janelaMs).forEach(function (ev) {
+        if (ev.ign) ignorados.push(ev); else contados.push(ev);
+      });
+
+      var buckets = {}, totalIn = 0, totalOut = 0;
+      contados.forEach(function (ev) {
+        var tipo = ev.tipo, a = ev.a, c = ev.c;
         var k = bucketKey(a.date, span);
         buckets[k] = buckets[k] || { in: 0, out: 0 };
         buckets[k][tipo]++;
         if (tipo === 'in') totalIn++; else totalOut++;
-        var nomeCard = card.name || '(sem nome)';
+        var nomeCard = ev.card.name || '(sem nome)';
         linhas.push({
-          date: a.date,
-          tipo: tipo,
-          motivo: c.motivo,
-          card: nomeCard,
-          origem: c.origem,
-          destino: c.destino,
+          date: a.date, tipo: tipo, motivo: c.motivo, card: nomeCard,
+          origem: c.origem, destino: c.destino,
           quem: (a.memberCreator && a.memberCreator.fullName) || ''
         });
-        if (tipo === 'out' && card.id) {
-          var entrada = criacaoCard(card.id), saida = new Date(a.date);
-          var p = partirNome(card.name);
-          clientes.push({
-            numero: p.numero, nome: p.nome, card: nomeCard,
-            entrada: entrada, saida: saida,
-            ms: Math.max(0, saida - entrada),
-            motivo: c.motivo
-          });
+        if (tipo === 'out') {
+          var ref = ev.ref || ev.criacao;
+          if (ref) {
+            var p = partirNome(ev.card.name);
+            clientes.push({
+              numero: p.numero, nome: p.nome, card: nomeCard,
+              entrada: ref, saida: ev.when,
+              ms: Math.max(0, ev.when - ref), motivo: c.motivo
+            });
+          }
         }
       });
 
@@ -351,6 +423,9 @@
       $('nOut').textContent = totalOut;
       var saldo = totalIn - totalOut;
       $('nSaldo').textContent = (saldo > 0 ? '+' : '') + saldo;
+      $('avisoIgn').textContent = ignorados.length
+        ? ignorados.length + ' evento(s) ignorado(s) por provável engano (veja "Ignorados" abaixo).'
+        : '';
 
       var rows = '<tr><th>' + (span > 31 ? 'Semana de' : 'Dia') + '</th><th>Entradas</th><th>Saídas</th><th>Saldo</th></tr>';
       Object.keys(buckets).map(Number).sort(function (a, b) { return b - a; }).forEach(function (k) {
@@ -367,6 +442,15 @@
       });
       $('clientes').innerHTML = cli;
       $('nClientes').textContent = clientes.length;
+
+      var ig = '<tr><th>Data</th><th>Evento</th><th>Card</th><th>Por que foi ignorado</th></tr>';
+      ignorados.slice().reverse().forEach(function (ev) {
+        ig += '<tr><td>' + fmt(ev.when) + '</td>' +
+          '<td class="' + (ev.tipo === 'in' ? 'tag-in' : 'tag-out') + '">' + (ev.tipo === 'in' ? 'Entrada' : 'Saída') + '</td>' +
+          '<td>' + esc(ev.card.name || '(sem nome)') + '</td><td>' + esc(ev.ign) + '</td></tr>';
+      });
+      $('ignorados').innerHTML = ig;
+      $('nIgn').textContent = ignorados.length;
 
       var det = '<tr><th>Data</th><th>Tipo</th><th>Card</th><th>Motivo</th></tr>';
       linhas.slice().reverse().forEach(function (l) {
@@ -392,6 +476,8 @@
 
     var listas = await t.lists('id', 'name');
     var salva = await t.get('board', 'shared', 'listaSaida', '');
+    var janelaSalva = await t.get('board', 'shared', 'janela', '5');
+    $('janela').checked = janelaSalva !== '0';
     listas.forEach(function (l) {
       var o = document.createElement('option');
       o.value = l.id; o.textContent = l.name;
@@ -434,6 +520,8 @@
   $('ate').onchange = atualizar;
   $('etiqueta').onchange = atualizar;
   $('listaSaida').onchange = atualizar;
+  $('janela').onchange = atualizar;
+  $('btnFechar').onclick = function () { t.closeModal(); };
 
   var iniciado = false;
   t.render(function () {
