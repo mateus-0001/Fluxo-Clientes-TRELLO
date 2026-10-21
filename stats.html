@@ -30,6 +30,7 @@
     .tag-in { color: var(--in); font-weight: 700; } .tag-out { color: var(--out); font-weight: 700; }
     #detalhes td, #detalhes th, #clientes td, #clientes th, #ignorados td, #ignorados th { text-align: left; }
     #clientes td.num, #clientes th.num { text-align: right; }
+    #clientes td.col { font-size: 12px; color: var(--muted); min-width: 160px; }
     #custom { display: none; gap: 8px; align-items: center; }
     .topo { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
     h2 { margin: 0; font-size: 18px; color: var(--fg); }
@@ -83,7 +84,7 @@
 
     <details>
       <summary>Tempo de cada cliente no board (<span id="nClientes">0</span>)</summary>
-      <small>Tempo da criação do card até a saída (em minutos, horas ou dias). Só entram clientes que saíram no período.</small>
+      <small>Tempo da entrada até a saída (em minutos, horas ou dias). Em "Por coluna", o tempo em cada lista, sem contar o tempo arquivado. Só entram clientes que saíram no período.</small>
       <div class="wrap"><table id="clientes"></table></div>
     </details>
 
@@ -101,6 +102,7 @@
 
 <script>
   var t = TrelloPowerUp.iframe({ appKey: window.APP_KEY, appName: window.APP_NAME });
+  var HIST_FILTER = 'createCard,copyCard,moveCardToBoard,moveCardFromBoard,updateCard:idList,updateCard:closed';
   var FILTER = 'createCard,copyCard,moveCardToBoard,moveCardFromBoard,deleteCard,updateCard:closed,updateCard:idList';
   var $ = function (id) { return document.getElementById(id); };
 
@@ -115,14 +117,15 @@
     });
   }
 
+  var listasBoard = [], colunasOrdem = [];
   var linhas = [], clientes = [], ignorados = [], resumoXlsx = [], totais = [0, 0, 0], spanAtual = 30;
   var boardNomes = {};
 
   // ---------- Trello API ----------
-  async function fetchActions(boardId, since, until, token) {
+  async function fetchActions(boardId, since, until, token, filter) {
     var all = [], before = until ? until.toISOString() : null;
     while (true) {
-      var url = 'https://api.trello.com/1/boards/' + boardId + '/actions?filter=' + FILTER +
+      var url = 'https://api.trello.com/1/boards/' + boardId + '/actions?filter=' + (filter || FILTER) +
         '&limit=1000&since=' + since.toISOString() +
         '&key=' + window.APP_KEY + '&token=' + token + (before ? '&before=' + before : '');
       var r = await fetch(url);
@@ -212,6 +215,7 @@
   // Tempo legível: minutos, horas ou dias, conforme o tamanho
   function fmtTempo(ms) {
     var min = Math.round(ms / 60000);
+    if (min < 1) return ms > 0 ? '< 1 min' : '0 min';
     if (min < 60) return min + ' min';
     var h = Math.floor(min / 60), m = min % 60;
     if (h < 24) return h + ' h' + (m ? ' ' + m + ' min' : '');
@@ -260,6 +264,46 @@
   }
   // END processar
 
+  // BEGIN colunas
+  // Tempo que o card ficou em cada lista. acts: ações do card em ordem cronológica
+  // { type, date: Date, data }. ref = quando entrou, fim = quando saiu.
+  function tempoPorColuna(acts, ref, fim, listaFinal) {
+    var tempos = {}, atual = null, desde = null, pausado = false;
+    function fecha(ate) {
+      if (atual && desde && !pausado && ate > desde) {
+        tempos[atual.id] = tempos[atual.id] || { nome: atual.nome, ms: 0 };
+        tempos[atual.id].ms += ate - desde;
+      }
+    }
+    acts.forEach(function (a) {
+      var d = a.data || {}, quando = a.date;
+      if (quando > fim) return;
+      if (a.type === 'createCard' || a.type === 'copyCard' || a.type === 'moveCardToBoard') {
+        fecha(quando);
+        atual = d.list ? { id: d.list.id, nome: d.list.name } : null;
+        desde = quando; pausado = false;
+      } else if (a.type === 'moveCardFromBoard') {
+        fecha(quando); atual = null; desde = null;
+      } else if (a.type === 'updateCard') {
+        if (d.listAfter) {
+          if (!atual && !desde && d.listBefore) { atual = { id: d.listBefore.id, nome: d.listBefore.name }; desde = ref; }
+          fecha(quando);
+          atual = { id: d.listAfter.id, nome: d.listAfter.name }; desde = quando;
+        } else if (d.old && d.old.closed === false && d.card && d.card.closed === true) {
+          fecha(quando); pausado = true; // arquivado: o tempo para de contar
+        } else if (d.old && d.old.closed === true && d.card && d.card.closed === false) {
+          pausado = false; desde = quando; // desarquivado: volta a contar
+        }
+      }
+    });
+    fecha(fim);
+    if (!Object.keys(tempos).length && listaFinal && listaFinal.id && ref && fim > ref) {
+      tempos[listaFinal.id] = { nome: listaFinal.name, ms: fim - ref }; // sem histórico: usa a lista em que estava
+    }
+    return tempos;
+  }
+  // END colunas
+
   // A data de criação do card está escondida nos 8 primeiros caracteres do ID
   function criacaoCard(id) { return new Date(parseInt(id.substring(0, 8), 16) * 1000); }
 
@@ -300,13 +344,42 @@
       ws1['!cols'] = [{ wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 10 }];
       XLSX.utils.book_append_sheet(wb, ws1, 'Resumo');
 
-      var cli = [['Nº do cliente', 'Nome', 'Card (nome completo)', 'Data de entrada', 'Data de saída', 'Tempo no board', 'Total em horas', 'Motivo da saída']];
-      clientes.slice().sort(function (a, b) { return b.saida - a.saida; }).forEach(function (c) {
-        cli.push([c.numero, c.nome, c.card, fmtFull(c.entrada), fmtFull(c.saida), fmtTempo(c.ms), Math.round(c.ms / 360000) / 10, c.motivo]);
+      var ordenados = clientes.slice().sort(function (a, b) { return b.saida - a.saida; });
+      var cab = ['Nº do cliente', 'Nome', 'Card (nome completo)', 'Data de entrada', 'Data de saída', 'Tempo no board', 'Total em horas', 'Motivo da saída'];
+      colunasOrdem.forEach(function (col) { cab.push('Tempo em: ' + col.nome); });
+      var cli = [cab];
+      ordenados.forEach(function (c) {
+        var linha = [c.numero, c.nome, c.card, fmtFull(c.entrada), fmtFull(c.saida), fmtTempo(c.ms), Math.round(c.ms / 360000) / 10, c.motivo];
+        colunasOrdem.forEach(function (col) {
+          var x = c.colunas && c.colunas[col.id];
+          linha.push(x && x.ms > 0 ? fmtTempo(x.ms) : '');
+        });
+        cli.push(linha);
       });
       var ws3 = XLSX.utils.aoa_to_sheet(cli);
-      ws3['!cols'] = [{ wch: 16 }, { wch: 28 }, { wch: 40 }, { wch: 15 }, { wch: 14 }, { wch: 18 }, { wch: 15 }, { wch: 32 }];
+      ws3['!cols'] = [{ wch: 16 }, { wch: 28 }, { wch: 40 }, { wch: 15 }, { wch: 14 }, { wch: 18 }, { wch: 15 }, { wch: 32 }]
+        .concat(colunasOrdem.map(function () { return { wch: 22 }; }));
       XLSX.utils.book_append_sheet(wb, ws3, 'Tempo por cliente');
+
+      if (colunasOrdem.length) {
+        var cabH = ['Nº do cliente', 'Nome'];
+        colunasOrdem.forEach(function (col) { cabH.push(col.nome + ' (h)'); });
+        cabH.push('Soma das colunas (h)');
+        var horas = [cabH];
+        ordenados.forEach(function (c) {
+          var linha = [c.numero, c.nome], soma = 0;
+          colunasOrdem.forEach(function (col) {
+            var x = c.colunas && c.colunas[col.id], h = x && x.ms > 0 ? Math.round(x.ms / 360000) / 10 : '';
+            if (h !== '') soma += h;
+            linha.push(h);
+          });
+          linha.push(Math.round(soma * 10) / 10);
+          horas.push(linha);
+        });
+        var ws5 = XLSX.utils.aoa_to_sheet(horas);
+        ws5['!cols'] = [{ wch: 16 }, { wch: 28 }].concat(colunasOrdem.map(function () { return { wch: 20 }; })).concat([{ wch: 20 }]);
+        XLSX.utils.book_append_sheet(wb, ws5, 'Horas por coluna');
+      }
 
       var det = [['Data', 'Hora', 'Tipo', 'Motivo', 'Card', 'Lista de origem', 'Lista de destino', 'Responsável']];
       linhas.slice().reverse().forEach(function (l) {
@@ -343,6 +416,41 @@
   }
 
   // ---------- Painel ----------
+  // Busca o histórico de movimentações dos clientes que saíram e calcula o tempo por coluna
+  async function carregarColunas(boardId, token) {
+    if (!clientes.length) return;
+    var ids = {}, minRef = null, maxFim = null;
+    clientes.forEach(function (c) {
+      ids[c.id] = true;
+      if (!minRef || c.entrada < minRef) minRef = c.entrada;
+      if (!maxFim || c.saida > maxFim) maxFim = c.saida;
+    });
+    var hist = await fetchActions(boardId, new Date(minRef.getTime() - 60000), new Date(maxFim.getTime() + 1000), token, HIST_FILTER);
+    var porCard = {}, vistos = {};
+    hist.forEach(function (a) {
+      if (vistos[a.id]) return; vistos[a.id] = true;
+      var cid = a.data && a.data.card && a.data.card.id;
+      if (!cid || !ids[cid]) return;
+      (porCard[cid] = porCard[cid] || []).push({ type: a.type, date: new Date(a.date), data: a.data, id: a.id });
+    });
+    clientes.forEach(function (c) {
+      var acts = (porCard[c.id] || []).sort(function (x, y) { return x.date - y.date || (x.id < y.id ? -1 : 1); });
+      c.colunas = tempoPorColuna(acts, c.entrada, c.saida, c.listaFinal);
+    });
+  }
+
+  // Colunas (listas) que aparecem, na ordem em que estão no board
+  function montarColunas() {
+    var usados = {};
+    clientes.forEach(function (c) {
+      Object.keys(c.colunas || {}).forEach(function (id) { if (c.colunas[id].ms > 0) usados[id] = c.colunas[id].nome; });
+    });
+    var ordem = [];
+    listasBoard.forEach(function (l) { if (usados[l.id]) { ordem.push({ id: l.id, nome: usados[l.id] }); delete usados[l.id]; } });
+    Object.keys(usados).forEach(function (id) { ordem.push({ id: id, nome: usados[id] }); });
+    return ordem;
+  }
+
   async function atualizar() {
     $('msg').textContent = 'Carregando...';
     try {
@@ -410,6 +518,7 @@
           if (ref) {
             var p = partirNome(ev.card.name);
             clientes.push({
+              id: ev.id, listaFinal: (a.data && a.data.list) || null,
               numero: p.numero, nome: p.nome, card: nomeCard,
               entrada: ref, saida: ev.when,
               ms: Math.max(0, ev.when - ref), motivo: c.motivo
@@ -417,6 +526,16 @@
           }
         }
       });
+
+      var avisoCol = '';
+      try {
+        $('msg').textContent = 'Calculando o tempo por coluna...';
+        await carregarColunas(boardId, token);
+      } catch (e) {
+        avisoCol = 'Não consegui calcular o tempo por coluna: ' + e.message;
+        clientes.forEach(function (c) { c.colunas = {}; });
+      }
+      colunasOrdem = montarColunas();
 
       totais = [totalIn, totalOut, totalIn - totalOut];
       $('nIn').textContent = totalIn;
@@ -435,10 +554,12 @@
       });
       $('tabela').innerHTML = rows;
 
-      var cli = '<tr><th>Nº</th><th>Nome</th><th>Entrada</th><th>Saída</th><th class="num">Tempo</th></tr>';
+      var cli = '<tr><th>Nº</th><th>Nome</th><th>Entrada</th><th>Saída</th><th class="num">Tempo</th><th>Por coluna</th></tr>';
       clientes.slice().sort(function (a, b) { return b.saida - a.saida; }).forEach(function (c) {
+        var porCol = colunasOrdem.filter(function (col) { return c.colunas && c.colunas[col.id] && c.colunas[col.id].ms > 0; })
+          .map(function (col) { return esc(col.nome) + ': ' + fmtTempo(c.colunas[col.id].ms); }).join(' · ');
         cli += '<tr><td>' + esc(c.numero) + '</td><td>' + esc(c.nome || c.card) + '</td><td>' + fmtFull(c.entrada) +
-          '</td><td>' + fmtFull(c.saida) + '</td><td class="num">' + fmtTempo(c.ms) + '</td></tr>';
+          '</td><td>' + fmtFull(c.saida) + '</td><td class="num">' + fmtTempo(c.ms) + '</td><td class="col">' + porCol + '</td></tr>';
       });
       $('clientes').innerHTML = cli;
       $('nClientes').textContent = clientes.length;
@@ -461,7 +582,7 @@
       });
       $('detalhes').innerHTML = det;
       $('nCards').textContent = linhas.length;
-      $('msg').textContent = '';
+      $('msg').textContent = avisoCol;
     } catch (e) {
       $('msg').textContent = e.message;
     }
@@ -475,6 +596,7 @@
     if (!ok) return;
 
     var listas = await t.lists('id', 'name');
+    listasBoard = listas;
     var salva = await t.get('board', 'shared', 'listaSaida', '');
     var janelaSalva = await t.get('board', 'shared', 'janela', '5');
     $('janela').checked = janelaSalva !== '0';
