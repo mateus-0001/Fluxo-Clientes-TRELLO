@@ -1,657 +1,187 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <link rel="stylesheet" href="https://p.trellocdn.com/power-up.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Entradas x Saídas de clientes</title>
+  <link rel="stylesheet" href="./css/estilo.css">
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./config.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <style>
-    :root { color-scheme: light; --bg:#ffffff; --fg:#172b4d; --muted:#5e6c84; --card:#f1f2f4; --line:#dfe1e6; --in:#216e4e; --out:#ae2e24; --field:#ffffff; --fieldline:#8590a2; }
-    body.dark { color-scheme: dark; --bg:#1d2125; --fg:#dee4ea; --muted:#9fadbc; --card:#2c333a; --line:#454f59; --in:#4bce97; --out:#f87168; --field:#22272b; --fieldline:#738496; }
-    html, body { height: 100%; }
-    body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; padding: 12px; margin: 0; box-sizing: border-box; overflow-y: auto; background: var(--bg); color: var(--fg); }
-    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
-    .row label { display: flex; align-items: center; gap: 4px; color: var(--fg); font-weight: 600; }
-    select, input[type=date] { background: var(--field); color: var(--fg); border: 1px solid var(--fieldline); border-radius: 4px; padding: 4px 6px; }
-    .cards { display: flex; gap: 10px; margin: 12px 0; }
-    .card { flex: 1; border-radius: 8px; padding: 12px; text-align: center; background: var(--card); color: var(--fg); font-weight: 600; }
-    .card b { display: block; font-size: 32px; color: var(--fg); }
-    .card.in b { color: var(--in); } .card.out b { color: var(--out); }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; color: var(--fg); }
-    th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; }
-    th { font-weight: 700; }
-    th:first-child, td:first-child { text-align: left; }
-    .wrap { padding-bottom: 8px; }
-    small { color: var(--muted); display: block; margin-bottom: 4px; }
-    #msg { color: var(--out); font-weight: 600; }
-    details { margin-top: 12px; }
-    summary { cursor: pointer; font-weight: 700; margin-bottom: 6px; color: var(--fg); }
-    .tag-in { color: var(--in); font-weight: 700; } .tag-out { color: var(--out); font-weight: 700; }
-    #detalhes td, #detalhes th, #clientes td, #clientes th, #ignorados td, #ignorados th { text-align: left; }
-    #clientes td.num, #clientes th.num { text-align: right; }
-    #clientes td.col { font-size: 12px; color: var(--muted); min-width: 160px; }
-    #custom { display: none; gap: 8px; align-items: center; }
-    .topo { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-    h2 { margin: 0; font-size: 18px; color: var(--fg); }
-  </style>
 </head>
 <body>
-  <div class="topo"><h2>Entradas x Saídas de clientes</h2><button id="btnFechar">Fechar</button></div>
-  <div id="auth" style="display:none">
-    <p>Para contar as entradas e saídas, o Power-Up precisa de permissão de <b>leitura</b> no seu Trello.</p>
-    <button class="mod-primary" id="btnAuth">Autorizar</button>
+
+  <!-- Autorização (só na primeira vez) -->
+  <div id="auth" hidden>
+    <div class="topo"><div class="titulo"><h1>Entradas x Saídas de clientes</h1></div></div>
+    <div class="secao">
+      <p>Para contar as entradas, saídas e cancelamentos, o Power-Up precisa de permissão de <b>leitura</b> no seu Trello.</p>
+      <button class="btn primary" id="btnAuth">Autorizar</button>
+    </div>
   </div>
 
-  <div id="panel" style="display:none">
-    <div class="row">
-      <label>Período:
-        <select id="periodo">
-          <option value="7">Últimos 7 dias</option>
-          <option value="30" selected>Últimos 30 dias</option>
-          <option value="90">Últimos 90 dias</option>
-          <option value="365">Últimos 12 meses</option>
-          <option value="custom">Personalizado...</option>
-        </select>
-      </label>
-      <span id="custom">
-        <label>De <input type="date" id="de"></label>
-        <label>até <input type="date" id="ate"></label>
+  <div id="app" hidden>
+    <header class="topo">
+      <div class="titulo">
+        <h1>Entradas x Saídas de clientes</h1>
+        <span class="sub" id="subtitulo"></span>
+      </div>
+      <div class="acoes">
+        <button class="btn" id="btnFiltros" aria-expanded="false" aria-controls="filtros">Filtros <span class="badge" id="nFiltros" hidden></span></button>
+        <button class="btn icone" id="btnAtualizar" title="Buscar os dados de novo no Trello" aria-label="Atualizar"></button>
+        <button class="btn primary" id="btnExportar">Exportar Excel</button>
+        <button class="btn icone" id="btnFechar" title="Fechar" aria-label="Fechar"></button>
+      </div>
+    </header>
+
+    <div class="barra">
+      <div class="chips" id="chips" role="group" aria-label="Período">
+        <button class="chip" data-p="7" aria-pressed="false">7 dias</button>
+        <button class="chip" data-p="30" aria-pressed="true">30 dias</button>
+        <button class="chip" data-p="90" aria-pressed="false">90 dias</button>
+        <button class="chip" data-p="365" aria-pressed="false">12 meses</button>
+        <button class="chip" data-p="mes" aria-pressed="false">Este mês</button>
+        <button class="chip" data-p="mespassado" aria-pressed="false">Mês passado</button>
+        <button class="chip" data-p="custom" aria-pressed="false">Personalizado</button>
+      </div>
+      <span id="custom" hidden>
+        <label class="campo">De <input type="date" id="de"></label>
+        <label class="campo">até <input type="date" id="ate"></label>
       </span>
-      <label>Etiqueta:
-        <select id="etiqueta"><option value="">Todas</option></select>
-      </label>
-    </div>
-    <div class="row">
-      <label>Também contar como saída quem for movido para:
-        <select id="listaSaida"><option value="">(nenhuma lista)</option></select>
-      </label>
-      <label><input type="checkbox" id="janela" checked> Ignorar cards criados e removidos em até 5 min (provável engano)</label>
-      <button id="btnAtualizar" class="mod-primary">Atualizar</button>
-      <button id="btnExportar">Exportar Excel</button>
     </div>
 
-    <div class="cards">
-      <div class="card in">Entradas<b id="nIn">–</b></div>
-      <div class="card out">Saídas<b id="nOut">–</b></div>
-      <div class="card">Saldo<b id="nSaldo">–</b></div>
-    </div>
-    <small>Entrada = card criado, copiado ou vindo de outro board. Saída = card arquivado, excluído, enviado a outro board ou movido para a lista escolhida acima.</small>
-    <small>Filtro de etiqueta usa as etiquetas que o card tem hoje. Cards excluídos não têm etiqueta e só aparecem em "Todas" ou "Sem etiqueta".</small>
-    <p id="msg"></p>
-    <small id="avisoIgn"></small>
-    <div class="wrap"><table id="tabela"></table></div>
+    <section class="painel-filtros" id="filtros" hidden>
+      <div class="grupo">
+        <span class="rot">Etiqueta</span>
+        <select id="etiqueta" aria-label="Etiqueta"><option value="">Todas as etiquetas</option></select>
+        <span class="muted" style="font-size:12px">Usa as etiquetas que o card tem hoje.</span>
+      </div>
+      <div class="grupo">
+        <span class="rot">Coluna de desistentes</span>
+        <select id="listaDesist" aria-label="Coluna de desistentes"><option value="">(nenhuma)</option></select>
+        <span class="muted" style="font-size:12px">Cards movidos para ela contam como cancelamento.</span>
+      </div>
+      <div class="grupo">
+        <span class="rot">Evitar contagem errada</span>
+        <label class="check"><input type="checkbox" id="janela" checked> Ignorar enganos: criado e removido em até 5 min (cópias: arquivadas ou excluídas em até 24 h) e volta de outro board em até 24 h</label>
+        <label class="check"><input type="checkbox" id="dedup" checked> Não contar o mesmo nº de cliente mais de uma vez no mês</label>
+      </div>
+    </section>
 
-    <details>
-      <summary>Tempo de cada cliente no board (<span id="nClientes">0</span>)</summary>
-      <small>Tempo da entrada até a saída (em minutos, horas ou dias). Em "Por coluna", o tempo em cada lista, sem contar o tempo arquivado. Só entram clientes que saíram no período.</small>
-      <div class="wrap"><table id="clientes"></table></div>
-    </details>
+    <div id="aviso"></div>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
 
-    <details>
-      <summary>Ignorados por provável engano (<span id="nIgn">0</span>)</summary>
-      <small>Não entram nas contagens. Aparecem aqui para você conferir.</small>
-      <div class="wrap"><table id="ignorados"></table></div>
-    </details>
+    <nav class="abas" role="tablist" id="abas">
+      <button class="aba" role="tab" data-aba="resumo" aria-selected="true">Resumo</button>
+      <button class="aba" role="tab" data-aba="gargalos" aria-selected="false">Gargalos</button>
+      <button class="aba" role="tab" data-aba="clientes" aria-selected="false">Clientes <span class="n" id="nClientes">0</span></button>
+      <button class="aba" role="tab" data-aba="cards" aria-selected="false">Cards <span class="n" id="nCards">0</span></button>
+      <button class="aba" role="tab" data-aba="pendentes" aria-selected="false">Pendentes <span class="n" id="nPend">0</span></button>
+      <button class="aba" role="tab" data-aba="ignorados" aria-selected="false">Ignorados <span class="n" id="nIgn">0</span></button>
+    </nav>
 
-    <details>
-      <summary>Ver cards que entraram e saíram (<span id="nCards">0</span>)</summary>
-      <div class="wrap"><table id="detalhes"></table></div>
-    </details>
+    <main id="principal">
+      <!-- RESUMO -->
+      <section id="aba-resumo" role="tabpanel">
+        <div class="kpis" id="kpis"></div>
+
+        <div class="secao">
+          <header><h2 id="tituloSerie">Evolução</h2></header>
+          <div class="tabela-wrap" id="tSerie"></div>
+        </div>
+
+        <div class="secao">
+          <header><h2>Por etiqueta <span class="dica" tabindex="0" data-tip="Entradas, saídas e cancelamentos de cada tipo de cliente. Cards excluídos aparecem em 'Sem etiqueta'. Um card com duas etiquetas conta nas duas.">?</span></h2></header>
+          <div class="tabela-wrap" id="tEtiquetas"></div>
+        </div>
+
+        <div class="duas">
+          <div class="secao">
+            <header><h2>Para onde foram <span class="dica" tabindex="0" data-tip="Boards para onde os clientes foram enviados no período.">?</span></h2></header>
+            <div class="tabela-wrap" id="tDestinos"></div>
+          </div>
+          <div class="secao">
+            <header><h2>Em que etapa desistiram <span class="dica" tabindex="0" data-tip="Coluna em que o card estava antes de ir para desistentes.">?</span></h2></header>
+            <div class="tabela-wrap" id="tEtapas"></div>
+          </div>
+        </div>
+
+        <p class="nota" id="naoContados"></p>
+        <details class="como">
+          <summary>Como o painel conta</summary>
+          <ul>
+            <li><b>Entrada:</b> card criado, copiado ou vindo de outro board.</li>
+            <li><b>Saída:</b> só o card enviado para <b>outro board</b>. Arquivados e excluídos não contam.</li>
+            <li><b>Cancelamento:</b> card movido para a coluna de desistentes. É contado à parte e não vira saída.</li>
+            <li><b>Saldo:</b> entradas − saídas − cancelamentos (quantos clientes ativos a mais ou a menos).</li>
+            <li><b>Engano:</b> card criado e removido (arquivado, excluído, cancelado ou enviado a outro board) em até 5 min é ignorado. Para <b>cópias</b>, o prazo para arquivar ou excluir é de 24 h, e copiar e enviar a outro board continua contando (projeto adicional).</li>
+            <li><b>Voltou de outro board:</b> em até 24 h, nem a saída nem a nova entrada contam. Depois de 24 h conta saída e nova entrada, e o caso fica em <b>Pendentes</b> para você decidir.</li>
+            <li><b>Desistentes:</b> saiu da coluna de desistentes continua só como cancelamento, sem nova entrada.</li>
+            <li><b>Mesmo nº de cliente:</b> o número no início do nome do card (com 6 dígitos ou mais) é contado uma vez por mês, em cada tipo. Se o card parece ser de 2 projetos (etiqueta 2pack, "projeto_1/projeto_2" ou texto na descrição), ele não é ignorado e vai para <b>Pendentes</b>.</li>
+            <li><b>Pendentes:</b> ficam contados provisoriamente. Ao confirmar "Conta" ou "Não conta", sua decisão é salva no Trello e vale para a equipe.</li>
+            <li><b>Desarquivado:</b> se um card é desarquivado, a contagem volta atrás.</li>
+          </ul>
+        </details>
+      </section>
+
+      <!-- GARGALOS -->
+      <section id="aba-gargalos" role="tabpanel" hidden>
+        <div class="secao">
+          <header><h2>Onde os clientes ficam mais tempo <span class="dica" tabindex="0" data-tip="Tempo que cada cliente ficou em cada coluna. Considera quem saiu para outro board ou cancelou no período. O tempo arquivado não conta.">?</span></h2></header>
+          <div id="destaqueGargalo"></div>
+          <div class="tabela-wrap" id="tGargalos"></div>
+        </div>
+      </section>
+
+      <!-- CLIENTES -->
+      <section id="aba-clientes" role="tabpanel" hidden>
+        <div class="secao">
+          <div class="ferramentas">
+            <input type="search" id="buscaClientes" placeholder="Buscar por número ou nome" aria-label="Buscar cliente">
+            <span class="muted" id="contaClientes"></span>
+          </div>
+          <div class="legenda" id="legendaColunas"></div>
+          <div class="tabela-wrap" id="tClientes"></div>
+        </div>
+      </section>
+
+      <!-- CARDS -->
+      <section id="aba-cards" role="tabpanel" hidden>
+        <div class="secao">
+          <div class="ferramentas">
+            <input type="search" id="buscaCards" placeholder="Buscar por card, motivo ou lista" aria-label="Buscar card">
+            <span class="muted" id="contaCards"></span>
+          </div>
+          <div class="tabela-wrap" id="tCards"></div>
+        </div>
+      </section>
+
+      <!-- PENDENTES -->
+      <section id="aba-pendentes" role="tabpanel" hidden>
+        <div class="secao">
+          <header><h2>Pendentes de confirmação <span class="dica" tabindex="0" data-tip="Casos em que só você sabe a resposta (cópia, volta de outro board, 2 projetos). Já estão contados provisoriamente. Sua decisão fica salva no Trello e vale para toda a equipe.">?</span></h2></header>
+          <div class="tabela-wrap" id="tPendentes"></div>
+        </div>
+        <div class="secao">
+          <header><h2>Decisões tomadas <span class="dica" tabindex="0" data-tip="Casos que você já confirmou. Use Desfazer para voltar ao padrão.">?</span></h2><span class="muted" id="contaDecisoes"></span></header>
+          <div class="tabela-wrap" id="tDecididos"></div>
+        </div>
+      </section>
+
+      <!-- IGNORADOS -->
+      <section id="aba-ignorados" role="tabpanel" hidden>
+        <div class="secao">
+          <header><h2>Ignorados por provável engano ou repetição <span class="dica" tabindex="0" data-tip="Não entram nas contagens. Ficam aqui para você conferir o motivo de cada um.">?</span></h2></header>
+          <div class="tabela-wrap" id="tIgnorados"></div>
+        </div>
+      </section>
+    </main>
   </div>
 
-<script>
-  var t = TrelloPowerUp.iframe({ appKey: window.APP_KEY, appName: window.APP_NAME });
-  var HIST_FILTER = 'createCard,copyCard,moveCardToBoard,moveCardFromBoard,updateCard:idList,updateCard:closed';
-  var FILTER = 'createCard,copyCard,moveCardToBoard,moveCardFromBoard,deleteCard,updateCard:closed,updateCard:idList';
-  var $ = function (id) { return document.getElementById(id); };
-
-  function pad(n) { return String(n).padStart(2, '0'); }
-  function fmt(d) { return pad(d.getDate()) + '/' + pad(d.getMonth() + 1); }
-  function fmtFull(d) { return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear(); }
-  function isoDia(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
-
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
-    });
-  }
-
-  var listasBoard = [], colunasOrdem = [];
-  var linhas = [], clientes = [], ignorados = [], resumoXlsx = [], totais = [0, 0, 0], spanAtual = 30;
-  var boardNomes = {};
-
-  // ---------- Trello API ----------
-  async function fetchActions(boardId, since, until, token, filter) {
-    var all = [], before = until ? until.toISOString() : null;
-    while (true) {
-      var url = 'https://api.trello.com/1/boards/' + boardId + '/actions?filter=' + (filter || FILTER) +
-        '&limit=1000&since=' + since.toISOString() +
-        '&key=' + window.APP_KEY + '&token=' + token + (before ? '&before=' + before : '');
-      var r = await fetch(url);
-      if (!r.ok) throw new Error('Erro ' + r.status + ' ao consultar o Trello');
-      var a = await r.json();
-      all = all.concat(a);
-      if (a.length < 1000) break;
-      before = a[a.length - 1].id;
-    }
-    return all;
-  }
-
-  // Etiquetas atuais de cada card (inclui arquivados; cards excluídos não existem mais)
-  async function fetchCardLabels(boardId, token) {
-    var mapa = {}, before = null;
-    while (true) {
-      var url = 'https://api.trello.com/1/boards/' + boardId + '/cards/all?fields=idLabels&limit=1000' +
-        '&key=' + window.APP_KEY + '&token=' + token + (before ? '&before=' + before : '');
-      var r = await fetch(url);
-      if (!r.ok) throw new Error('Erro ' + r.status + ' ao buscar as etiquetas dos cards');
-      var a = await r.json();
-      var novos = 0, menor = null;
-      a.forEach(function (c) {
-        if (!(c.id in mapa)) { mapa[c.id] = c.idLabels || []; novos++; }
-        if (menor === null || c.id < menor) menor = c.id;
-      });
-      if (a.length < 1000 || novos === 0) break;
-      before = menor;
-    }
-    return mapa;
-  }
-
-  async function fetchLabels(boardId, token) {
-    var r = await fetch('https://api.trello.com/1/boards/' + boardId + '/labels?fields=name,color&limit=1000&key=' + window.APP_KEY + '&token=' + token);
-    if (!r.ok) return [];
-    return r.json();
-  }
-
-  // O Trello só manda o ID do outro board; aqui buscamos o nome pelo ID
-  async function resolverBoards(actions, token) {
-    var ids = {};
-    actions.forEach(function (a) {
-      var d = a.data || {};
-      var b = a.type === 'moveCardFromBoard' ? d.boardTarget : a.type === 'moveCardToBoard' ? d.boardSource : null;
-      if (b && b.id && !b.name) ids[b.id] = true;
-    });
-    await Promise.all(Object.keys(ids).map(async function (id) {
-      if (boardNomes[id]) return;
-      try {
-        var r = await fetch('https://api.trello.com/1/boards/' + id + '?fields=name&key=' + window.APP_KEY + '&token=' + token);
-        if (r.ok) { var j = await r.json(); boardNomes[id] = j.name; }
-      } catch (e) { /* se falhar, fica "undefined" */ }
-    }));
-  }
-
-  function nomeBoard(b) {
-    if (!b) return 'undefined';
-    return b.name || boardNomes[b.id] || 'undefined';
-  }
-
-  // ---------- Regras ----------
-  function classify(a, listaSaida) {
-    var d = a.data || {};
-    var lista = (d.list && d.list.name) || '';
-    switch (a.type) {
-      case 'createCard': return { tipo: 'in', motivo: 'Criado', origem: '', destino: lista };
-      case 'copyCard': return { tipo: 'in', motivo: 'Copiado', origem: '', destino: lista };
-      case 'moveCardToBoard':
-        return { tipo: 'in', motivo: 'Veio de outro board: ' + nomeBoard(d.boardSource), origem: '', destino: lista };
-      case 'moveCardFromBoard':
-        return { tipo: 'out', motivo: 'Enviado a outro board: ' + nomeBoard(d.boardTarget), origem: lista, destino: '' };
-      case 'deleteCard': return { tipo: 'out', motivo: 'Excluído', origem: lista, destino: '' };
-      case 'updateCard':
-        if (d.old && d.old.closed === false && d.card && d.card.closed === true)
-          return { tipo: 'out', motivo: 'Arquivado', origem: lista, destino: '' };
-        if (d.old && d.old.closed === true && d.card && d.card.closed === false)
-          return { tipo: 'ret', motivo: 'Desarquivado', origem: '', destino: lista };
-        if (listaSaida && d.listAfter && d.listAfter.id === listaSaida)
-          return { tipo: 'out', motivo: 'Movido para ' + d.listAfter.name, origem: (d.listBefore && d.listBefore.name) || '', destino: d.listAfter.name };
-        if (listaSaida && d.listBefore && d.listBefore.id === listaSaida && d.listAfter && d.listAfter.id !== listaSaida)
-          return { tipo: 'ret', motivo: 'Saiu da lista de saída', origem: d.listBefore.name, destino: d.listAfter.name };
-        return null;
-    }
-    return null;
-  }
-
-  // Tempo legível: minutos, horas ou dias, conforme o tamanho
-  function fmtTempo(ms) {
-    var min = Math.round(ms / 60000);
-    if (min < 1) return ms > 0 ? '< 1 min' : '0 min';
-    if (min < 60) return min + ' min';
-    var h = Math.floor(min / 60), m = min % 60;
-    if (h < 24) return h + ' h' + (m ? ' ' + m + ' min' : '');
-    var d = Math.floor(h / 24); h = h % 24;
-    return d + (d === 1 ? ' dia' : ' dias') + (h ? ' ' + h + ' h' : '');
-  }
-
-  function aplicarTema() {
-    var th = null;
-    try { th = t.getContext().theme; } catch (e) {}
-    if (!th) th = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
-    document.body.className = th === 'dark' ? 'dark' : 'light';
-  }
-
-  // BEGIN processar
-  // Corrige duplicatas e enganos. Recebe os eventos em ordem cronológica:
-  // { id, tipo: 'in' | 'out' | 'ret', when: Date, criacao: Date|null }
-  function processar(lista, janelaMs) {
-    var status = {}, ultimaEntrada = {}, ultimaSaida = {}, out = [];
-    lista.forEach(function (ev) {
-      var id = ev.id, st = status[id];
-      if (ev.tipo === 'in') {
-        if (st === 'in') return; // duplicado (ex.: createCard + copyCard do mesmo card)
-        status[id] = 'in'; ultimaEntrada[id] = ev; out.push(ev);
-      } else if (ev.tipo === 'out') {
-        if (st === 'out') return; // já tinha saído (ex.: arquivou e depois excluiu)
-        status[id] = 'out';
-        var ent = ultimaEntrada[id];
-        ev.ref = ent ? ent.when : (ev.criacao || null);
-        if (janelaMs > 0 && ev.ref && (ev.when - ev.ref) <= janelaMs) {
-          ev.ign = 'Criado, copiado ou recebido e removido em poucos minutos (provável engano)';
-          if (ent && !ent.ign) { ent.ign = ev.ign; ev.pairEntry = ent; }
-        }
-        ultimaSaida[id] = ev; out.push(ev);
-      } else if (ev.tipo === 'ret') {
-        if (st !== 'out') return; // voltou, mas não havia saída registrada no período
-        status[id] = 'in';
-        var se = ultimaSaida[id];
-        if (se) {
-          if (se.pairEntry) { se.pairEntry.ign = null; se.pairEntry = null; } // o card existe, então a entrada vale
-          se.ign = 'Saída desfeita: o card voltou ao board';
-        }
-      }
-    });
-    return out;
-  }
-  // END processar
-
-  // BEGIN colunas
-  // Tempo que o card ficou em cada lista. acts: ações do card em ordem cronológica
-  // { type, date: Date, data }. ref = quando entrou, fim = quando saiu.
-  function tempoPorColuna(acts, ref, fim, listaFinal) {
-    var tempos = {}, atual = null, desde = null, pausado = false;
-    function fecha(ate) {
-      if (atual && desde && !pausado && ate > desde) {
-        tempos[atual.id] = tempos[atual.id] || { nome: atual.nome, ms: 0 };
-        tempos[atual.id].ms += ate - desde;
-      }
-    }
-    acts.forEach(function (a) {
-      var d = a.data || {}, quando = a.date;
-      if (quando > fim) return;
-      if (a.type === 'createCard' || a.type === 'copyCard' || a.type === 'moveCardToBoard') {
-        fecha(quando);
-        atual = d.list ? { id: d.list.id, nome: d.list.name } : null;
-        desde = quando; pausado = false;
-      } else if (a.type === 'moveCardFromBoard') {
-        fecha(quando); atual = null; desde = null;
-      } else if (a.type === 'updateCard') {
-        if (d.listAfter) {
-          if (!atual && !desde && d.listBefore) { atual = { id: d.listBefore.id, nome: d.listBefore.name }; desde = ref; }
-          fecha(quando);
-          atual = { id: d.listAfter.id, nome: d.listAfter.name }; desde = quando;
-        } else if (d.old && d.old.closed === false && d.card && d.card.closed === true) {
-          fecha(quando); pausado = true; // arquivado: o tempo para de contar
-        } else if (d.old && d.old.closed === true && d.card && d.card.closed === false) {
-          pausado = false; desde = quando; // desarquivado: volta a contar
-        }
-      }
-    });
-    fecha(fim);
-    if (!Object.keys(tempos).length && listaFinal && listaFinal.id && ref && fim > ref) {
-      tempos[listaFinal.id] = { nome: listaFinal.name, ms: fim - ref }; // sem histórico: usa a lista em que estava
-    }
-    return tempos;
-  }
-  // END colunas
-
-  // A data de criação do card está escondida nos 8 primeiros caracteres do ID
-  function criacaoCard(id) { return new Date(parseInt(id.substring(0, 8), 16) * 1000); }
-
-  // "1234567890 - NOME" -> { numero: "1234567890", nome: "NOME" }
-  function partirNome(n) {
-    var m = String(n || '').match(/^\s*(\d+)\s*(?:[-–—:]\s*)?(.*)$/);
-    if (m) return { numero: m[1], nome: m[2].trim() };
-    return { numero: '', nome: String(n || '').trim() };
-  }
-
-  function passaEtiqueta(cardId, etiqueta, cardLabels) {
-    if (!etiqueta) return true;
-    var ls = cardId ? cardLabels[cardId] : null;
-    if (etiqueta === '__none__') return !ls || ls.length === 0;
-    return !!ls && ls.indexOf(etiqueta) >= 0;
-  }
-
-  function bucketKey(date, span) {
-    var d = new Date(date);
-    if (span > 31) { // agrupa por semana (segunda-feira)
-      var diff = (d.getDay() + 6) % 7;
-      d.setDate(d.getDate() - diff);
-    }
-    d.setHours(0, 0, 0, 0);
-    return d.getTime();
-  }
-
-  // ---------- Excel ----------
-  function exportar() {
-    if (!linhas.length && !ignorados.length) { $('msg').textContent = 'Nada para exportar neste período.'; return; }
-    try {
-      var wb = XLSX.utils.book_new();
-
-      var resumo = [[spanAtual > 31 ? 'Semana de' : 'Dia', 'Entradas', 'Saídas', 'Saldo']]
-        .concat(resumoXlsx.slice().reverse())
-        .concat([['TOTAL', totais[0], totais[1], totais[2]]]);
-      var ws1 = XLSX.utils.aoa_to_sheet(resumo);
-      ws1['!cols'] = [{ wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 10 }];
-      XLSX.utils.book_append_sheet(wb, ws1, 'Resumo');
-
-      var ordenados = clientes.slice().sort(function (a, b) { return b.saida - a.saida; });
-      var cab = ['Nº do cliente', 'Nome', 'Card (nome completo)', 'Data de entrada', 'Data de saída', 'Tempo no board', 'Total em horas', 'Motivo da saída'];
-      colunasOrdem.forEach(function (col) { cab.push('Tempo em: ' + col.nome); });
-      var cli = [cab];
-      ordenados.forEach(function (c) {
-        var linha = [c.numero, c.nome, c.card, fmtFull(c.entrada), fmtFull(c.saida), fmtTempo(c.ms), Math.round(c.ms / 360000) / 10, c.motivo];
-        colunasOrdem.forEach(function (col) {
-          var x = c.colunas && c.colunas[col.id];
-          linha.push(x && x.ms > 0 ? fmtTempo(x.ms) : '');
-        });
-        cli.push(linha);
-      });
-      var ws3 = XLSX.utils.aoa_to_sheet(cli);
-      ws3['!cols'] = [{ wch: 16 }, { wch: 28 }, { wch: 40 }, { wch: 15 }, { wch: 14 }, { wch: 18 }, { wch: 15 }, { wch: 32 }]
-        .concat(colunasOrdem.map(function () { return { wch: 22 }; }));
-      XLSX.utils.book_append_sheet(wb, ws3, 'Tempo por cliente');
-
-      if (colunasOrdem.length) {
-        var cabH = ['Nº do cliente', 'Nome'];
-        colunasOrdem.forEach(function (col) { cabH.push(col.nome + ' (h)'); });
-        cabH.push('Soma das colunas (h)');
-        var horas = [cabH];
-        ordenados.forEach(function (c) {
-          var linha = [c.numero, c.nome], soma = 0;
-          colunasOrdem.forEach(function (col) {
-            var x = c.colunas && c.colunas[col.id], h = x && x.ms > 0 ? Math.round(x.ms / 360000) / 10 : '';
-            if (h !== '') soma += h;
-            linha.push(h);
-          });
-          linha.push(Math.round(soma * 10) / 10);
-          horas.push(linha);
-        });
-        var ws5 = XLSX.utils.aoa_to_sheet(horas);
-        ws5['!cols'] = [{ wch: 16 }, { wch: 28 }].concat(colunasOrdem.map(function () { return { wch: 20 }; })).concat([{ wch: 20 }]);
-        XLSX.utils.book_append_sheet(wb, ws5, 'Horas por coluna');
-      }
-
-      var det = [['Data', 'Hora', 'Tipo', 'Motivo', 'Card', 'Lista de origem', 'Lista de destino', 'Responsável']];
-      linhas.slice().reverse().forEach(function (l) {
-        var d = new Date(l.date);
-        det.push([
-          fmtFull(d),
-          pad(d.getHours()) + ':' + pad(d.getMinutes()),
-          l.tipo === 'in' ? 'Entrada' : 'Saída',
-          l.motivo, l.card, l.origem, l.destino, l.quem
-        ]);
-      });
-      var ws2 = XLSX.utils.aoa_to_sheet(det);
-      ws2['!cols'] = [{ wch: 12 }, { wch: 7 }, { wch: 9 }, { wch: 32 }, { wch: 40 }, { wch: 22 }, { wch: 22 }, { wch: 22 }];
-      XLSX.utils.book_append_sheet(wb, ws2, 'Cards');
-
-      if (ignorados.length) {
-        var ig = [['Data', 'Hora', 'Evento', 'Card', 'O que foi', 'Por que foi ignorado']];
-        ignorados.forEach(function (ev) {
-          var d = ev.when;
-          ig.push([fmtFull(d), pad(d.getHours()) + ':' + pad(d.getMinutes()), ev.tipo === 'in' ? 'Entrada' : 'Saída',
-            ev.card.name || '(sem nome)', ev.c.motivo, ev.ign]);
-        });
-        var ws4 = XLSX.utils.aoa_to_sheet(ig);
-        ws4['!cols'] = [{ wch: 12 }, { wch: 7 }, { wch: 9 }, { wch: 40 }, { wch: 32 }, { wch: 60 }];
-        XLSX.utils.book_append_sheet(wb, ws4, 'Ignorados');
-      }
-
-      var hoje = new Date();
-      XLSX.writeFile(wb, 'fluxo-clientes-' + isoDia(hoje) + '.xlsx');
-      $('msg').textContent = '';
-    } catch (e) {
-      $('msg').textContent = 'Não consegui gerar o Excel: ' + e.message;
-    }
-  }
-
-  // ---------- Painel ----------
-  // Busca o histórico de movimentações dos clientes que saíram e calcula o tempo por coluna
-  async function carregarColunas(boardId, token) {
-    if (!clientes.length) return;
-    var ids = {}, minRef = null, maxFim = null;
-    clientes.forEach(function (c) {
-      ids[c.id] = true;
-      if (!minRef || c.entrada < minRef) minRef = c.entrada;
-      if (!maxFim || c.saida > maxFim) maxFim = c.saida;
-    });
-    var hist = await fetchActions(boardId, new Date(minRef.getTime() - 60000), new Date(maxFim.getTime() + 1000), token, HIST_FILTER);
-    var porCard = {}, vistos = {};
-    hist.forEach(function (a) {
-      if (vistos[a.id]) return; vistos[a.id] = true;
-      var cid = a.data && a.data.card && a.data.card.id;
-      if (!cid || !ids[cid]) return;
-      (porCard[cid] = porCard[cid] || []).push({ type: a.type, date: new Date(a.date), data: a.data, id: a.id });
-    });
-    clientes.forEach(function (c) {
-      var acts = (porCard[c.id] || []).sort(function (x, y) { return x.date - y.date || (x.id < y.id ? -1 : 1); });
-      c.colunas = tempoPorColuna(acts, c.entrada, c.saida, c.listaFinal);
-    });
-  }
-
-  // Colunas (listas) que aparecem, na ordem em que estão no board
-  function montarColunas() {
-    var usados = {};
-    clientes.forEach(function (c) {
-      Object.keys(c.colunas || {}).forEach(function (id) { if (c.colunas[id].ms > 0) usados[id] = c.colunas[id].nome; });
-    });
-    var ordem = [];
-    listasBoard.forEach(function (l) { if (usados[l.id]) { ordem.push({ id: l.id, nome: usados[l.id] }); delete usados[l.id]; } });
-    Object.keys(usados).forEach(function (id) { ordem.push({ id: id, nome: usados[id] }); });
-    return ordem;
-  }
-
-  async function atualizar() {
-    $('msg').textContent = 'Carregando...';
-    try {
-      var sel = $('periodo').value, since, until = null;
-      if (sel === 'custom') {
-        var de = $('de').value, ate = $('ate').value;
-        if (!de || !ate) throw new Error('Escolha a data inicial e a final.');
-        since = new Date(de + 'T00:00:00');
-        until = new Date(ate + 'T23:59:59.999');
-        if (since > until) throw new Error('A data inicial é depois da data final.');
-      } else {
-        since = new Date(Date.now() - parseInt(sel, 10) * 86400000);
-      }
-      var span = ((until || new Date()) - since) / 86400000;
-      var listaSaida = $('listaSaida').value;
-      var etiqueta = $('etiqueta').value;
-      var janelaMs = $('janela').checked ? 5 * 60000 : 0;
-      await t.set('board', 'shared', { listaSaida: listaSaida, janela: $('janela').checked ? '5' : '0' });
-
-      var token = await t.getRestApi().getToken();
-      var boardId = t.getContext().board;
-      var actions = await fetchActions(boardId, since, until, token);
-      var vistos = {};
-      actions = actions.filter(function (a) { if (vistos[a.id]) return false; vistos[a.id] = true; return true; });
-      await resolverBoards(actions, token);
-      var cardLabels = etiqueta ? await fetchCardLabels(boardId, token) : {};
-
-      actions.sort(function (a, b) { return new Date(a.date) - new Date(b.date) || (a.id < b.id ? -1 : 1); });
-      linhas = []; clientes = []; ignorados = []; resumoXlsx = []; spanAtual = span;
-
-      var eventos = [];
-      actions.forEach(function (a) {
-        var c = classify(a, listaSaida);
-        if (!c) return;
-        var card = (a.data && a.data.card) || {};
-        if (!passaEtiqueta(card.id, etiqueta, cardLabels)) return;
-        eventos.push({
-          a: a, c: c, card: card, tipo: c.tipo, when: new Date(a.date),
-          id: card.id || ('sem-id-' + a.id),
-          criacao: card.id ? criacaoCard(card.id) : null,
-          ign: null
-        });
-      });
-
-      var contados = [];
-      processar(eventos, janelaMs).forEach(function (ev) {
-        if (ev.ign) ignorados.push(ev); else contados.push(ev);
-      });
-
-      var buckets = {}, totalIn = 0, totalOut = 0;
-      contados.forEach(function (ev) {
-        var tipo = ev.tipo, a = ev.a, c = ev.c;
-        var k = bucketKey(a.date, span);
-        buckets[k] = buckets[k] || { in: 0, out: 0 };
-        buckets[k][tipo]++;
-        if (tipo === 'in') totalIn++; else totalOut++;
-        var nomeCard = ev.card.name || '(sem nome)';
-        linhas.push({
-          date: a.date, tipo: tipo, motivo: c.motivo, card: nomeCard,
-          origem: c.origem, destino: c.destino,
-          quem: (a.memberCreator && a.memberCreator.fullName) || ''
-        });
-        if (tipo === 'out') {
-          var ref = ev.ref || ev.criacao;
-          if (ref) {
-            var p = partirNome(ev.card.name);
-            clientes.push({
-              id: ev.id, listaFinal: (a.data && a.data.list) || null,
-              numero: p.numero, nome: p.nome, card: nomeCard,
-              entrada: ref, saida: ev.when,
-              ms: Math.max(0, ev.when - ref), motivo: c.motivo
-            });
-          }
-        }
-      });
-
-      var avisoCol = '';
-      try {
-        $('msg').textContent = 'Calculando o tempo por coluna...';
-        await carregarColunas(boardId, token);
-      } catch (e) {
-        avisoCol = 'Não consegui calcular o tempo por coluna: ' + e.message;
-        clientes.forEach(function (c) { c.colunas = {}; });
-      }
-      colunasOrdem = montarColunas();
-
-      totais = [totalIn, totalOut, totalIn - totalOut];
-      $('nIn').textContent = totalIn;
-      $('nOut').textContent = totalOut;
-      var saldo = totalIn - totalOut;
-      $('nSaldo').textContent = (saldo > 0 ? '+' : '') + saldo;
-      $('avisoIgn').textContent = ignorados.length
-        ? ignorados.length + ' evento(s) ignorado(s) por provável engano (veja "Ignorados" abaixo).'
-        : '';
-
-      var rows = '<tr><th>' + (span > 31 ? 'Semana de' : 'Dia') + '</th><th>Entradas</th><th>Saídas</th><th>Saldo</th></tr>';
-      Object.keys(buckets).map(Number).sort(function (a, b) { return b - a; }).forEach(function (k) {
-        var b = buckets[k], s = b.in - b.out;
-        resumoXlsx.unshift([fmt(new Date(k)), b.in, b.out, s]);
-        rows += '<tr><td>' + fmt(new Date(k)) + '</td><td>' + b.in + '</td><td>' + b.out + '</td><td>' + (s > 0 ? '+' : '') + s + '</td></tr>';
-      });
-      $('tabela').innerHTML = rows;
-
-      var cli = '<tr><th>Nº</th><th>Nome</th><th>Entrada</th><th>Saída</th><th class="num">Tempo</th><th>Por coluna</th></tr>';
-      clientes.slice().sort(function (a, b) { return b.saida - a.saida; }).forEach(function (c) {
-        var porCol = colunasOrdem.filter(function (col) { return c.colunas && c.colunas[col.id] && c.colunas[col.id].ms > 0; })
-          .map(function (col) { return esc(col.nome) + ': ' + fmtTempo(c.colunas[col.id].ms); }).join(' · ');
-        cli += '<tr><td>' + esc(c.numero) + '</td><td>' + esc(c.nome || c.card) + '</td><td>' + fmtFull(c.entrada) +
-          '</td><td>' + fmtFull(c.saida) + '</td><td class="num">' + fmtTempo(c.ms) + '</td><td class="col">' + porCol + '</td></tr>';
-      });
-      $('clientes').innerHTML = cli;
-      $('nClientes').textContent = clientes.length;
-
-      var ig = '<tr><th>Data</th><th>Evento</th><th>Card</th><th>Por que foi ignorado</th></tr>';
-      ignorados.slice().reverse().forEach(function (ev) {
-        ig += '<tr><td>' + fmt(ev.when) + '</td>' +
-          '<td class="' + (ev.tipo === 'in' ? 'tag-in' : 'tag-out') + '">' + (ev.tipo === 'in' ? 'Entrada' : 'Saída') + '</td>' +
-          '<td>' + esc(ev.card.name || '(sem nome)') + '</td><td>' + esc(ev.ign) + '</td></tr>';
-      });
-      $('ignorados').innerHTML = ig;
-      $('nIgn').textContent = ignorados.length;
-
-      var det = '<tr><th>Data</th><th>Tipo</th><th>Card</th><th>Motivo</th></tr>';
-      linhas.slice().reverse().forEach(function (l) {
-        var dt = new Date(l.date);
-        det += '<tr><td>' + fmt(dt) + '</td>' +
-          '<td class="' + (l.tipo === 'in' ? 'tag-in' : 'tag-out') + '">' + (l.tipo === 'in' ? 'Entrada' : 'Saída') + '</td>' +
-          '<td>' + esc(l.card) + '</td><td>' + esc(l.motivo) + '</td></tr>';
-      });
-      $('detalhes').innerHTML = det;
-      $('nCards').textContent = linhas.length;
-      $('msg').textContent = avisoCol;
-    } catch (e) {
-      $('msg').textContent = e.message;
-    }
-  }
-
-  async function iniciar() {
-    var api = t.getRestApi();
-    var ok = await api.isAuthorized();
-    $('auth').style.display = ok ? 'none' : 'block';
-    $('panel').style.display = ok ? 'block' : 'none';
-    if (!ok) return;
-
-    var listas = await t.lists('id', 'name');
-    listasBoard = listas;
-    var salva = await t.get('board', 'shared', 'listaSaida', '');
-    var janelaSalva = await t.get('board', 'shared', 'janela', '5');
-    $('janela').checked = janelaSalva !== '0';
-    listas.forEach(function (l) {
-      var o = document.createElement('option');
-      o.value = l.id; o.textContent = l.name;
-      if (l.id === salva) o.selected = true;
-      $('listaSaida').appendChild(o);
-    });
-
-    try {
-      var token = await api.getToken();
-      var labels = await fetchLabels(t.getContext().board, token);
-      labels.forEach(function (l) {
-        var o = document.createElement('option');
-        o.value = l.id;
-        o.textContent = l.name || (l.color ? '(' + l.color + ', sem nome)' : '(sem nome)');
-        $('etiqueta').appendChild(o);
-      });
-      var sem = document.createElement('option');
-      sem.value = '__none__'; sem.textContent = 'Sem etiqueta';
-      $('etiqueta').appendChild(sem);
-    } catch (e) { /* sem etiquetas, o filtro fica só com "Todas" */ }
-
-    atualizar();
-  }
-
-  $('btnAuth').onclick = function () {
-    t.getRestApi().authorize({ scope: 'read', expiration: 'never' }).then(iniciar);
-  };
-  $('btnAtualizar').onclick = atualizar;
-  $('btnExportar').onclick = exportar;
-  $('periodo').onchange = function () {
-    var custom = $('periodo').value === 'custom';
-    $('custom').style.display = custom ? 'flex' : 'none';
-    if (custom && !$('de').value) {
-      $('ate').value = isoDia(new Date());
-      $('de').value = isoDia(new Date(Date.now() - 30 * 86400000));
-    }
-    atualizar();
-  };
-  $('de').onchange = atualizar;
-  $('ate').onchange = atualizar;
-  $('etiqueta').onchange = atualizar;
-  $('listaSaida').onchange = atualizar;
-  $('janela').onchange = atualizar;
-  $('btnFechar').onclick = function () { t.closeModal(); };
-
-  var iniciado = false;
-  t.render(function () {
-    aplicarTema();
-    if (iniciado) return;
-    iniciado = true;
-    return iniciar();
-  });
-</script>
+  <script src="./js/regras.js"></script>
+  <script src="./js/trello.js"></script>
+  <script src="./js/excel.js"></script>
+  <script src="./js/app.js"></script>
 </body>
 </html>
