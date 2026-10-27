@@ -110,7 +110,8 @@
   var MOTIVO_VOLTOU = 'Voltou de outro board em até 24 h: não conta como nova entrada';
   var MOTIVO_VOLTOU_SAIDA = 'Voltou de outro board em até 24 h: a saída foi desfeita';
   var PEND_RETORNO = 'Voltou de outro board depois de mais de 24 h: é um projeto novo ou o mesmo projeto?';
-  var PEND_COPIA = 'Card copiado: é um projeto novo ou foi cópia por engano?';
+  var MOTIVO_COPIA_INTERNA = 'Cópia feita dentro do próprio board: não conta como entrada';
+  var PEND_COPIA_INTERNA = 'Cópia feita no próprio board que depois saiu: é um projeto adicional?';
   var PEND_DOIS = 'Parece ser de 2 projetos (etiqueta 2pack, nome ou descrição): confirme se conta';
   var PEND_REPETIDO = 'Mesmo nº de cliente já contado no mês, mas o card parece ser de outro projeto: confirme se conta';
 
@@ -145,6 +146,7 @@
             }
             addPend(ev, PEND_RETORNO);
           }
+          if (ev.c && ev.c.copia && ev.c.copiaInterna) ev.ign = MOTIVO_COPIA_INTERNA;
           status[id] = 'in'; ultEntrada[id] = ev; out.push(ev);
           break;
 
@@ -155,6 +157,7 @@
           var ent = ultEntrada[id];
           ev.ref = ent ? ent.when : (ev.criacao || null);
           var copia = ent && ent.c && ent.c.copia;
+          if (ent && ent.c && ent.c.copiaInterna && ent.ign === MOTIVO_COPIA_INTERNA) { ent.ign = null; addPend(ent, PEND_COPIA_INTERNA); }
           // cópia enviada a outro board é um projeto adicional legítimo: não entra na regra de engano
           if (!(copia && ev.tipo === 'out') && dentro(ev, ev.ref, janelaMs)) {
             ev.ign = MOTIVO_PAR;
@@ -219,7 +222,6 @@
   R.marcarPendencias = function (kept) {
     kept.forEach(function (ev) {
       if (ev.ign || ev.decidido || ev.tipo !== 'in') return;
-      if (ev.c && ev.c.copia) addPend(ev, PEND_COPIA);
       if (ev.doisProjetos && !(ev.pend && ev.pend.indexOf(PEND_REPETIDO) >= 0)) addPend(ev, PEND_DOIS);
     });
     return kept;
@@ -310,6 +312,7 @@
         etapa: ev.c.origem || '',
         motivo: ev.c.motivo,
         etiquetas: ids,
+        shortLink: ev.card.shortLink || '',
         listaFinal: (ev.a && ev.a.data && ev.a.data.list) || null,
         colunas: {}
       });
