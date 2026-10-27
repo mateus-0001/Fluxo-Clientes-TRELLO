@@ -85,44 +85,53 @@
       <!-- RESUMO -->
       <section id="aba-resumo" role="tabpanel">
         <div class="kpis" id="kpis"></div>
+        <p class="nota" id="notaComparacao"></p>
 
-        <div class="secao">
-          <header><h2 id="tituloSerie">Evolução</h2></header>
-          <div class="tabela-wrap" id="tSerie"></div>
-        </div>
+        <details class="secao det" id="det-serie">
+          <summary><span class="t" id="tituloSerie">Evolução por dia</span><span class="res" id="resSerie"></span></summary>
+          <div class="corpo"><div class="tabela-wrap" id="tSerie"></div></div>
+        </details>
 
-        <div class="secao">
-          <header><h2>Por etiqueta <span class="dica" tabindex="0" data-tip="Entradas, saídas e cancelamentos de cada tipo de cliente. Cards excluídos aparecem em 'Sem etiqueta'. Um card com duas etiquetas conta nas duas.">?</span></h2></header>
-          <div class="tabela-wrap" id="tEtiquetas"></div>
-        </div>
+        <details class="secao det" id="det-etiquetas">
+          <summary><span class="t">Por etiqueta</span><span class="res" id="resEtiquetas"></span></summary>
+          <div class="corpo">
+            <p class="nota">Entradas, saídas e cancelamentos de cada tipo de cliente. Usa as etiquetas que o card tem hoje; cards excluídos aparecem em "Sem etiqueta" e um card com duas etiquetas conta nas duas.</p>
+            <div class="tabela-wrap" id="tEtiquetas"></div>
+          </div>
+        </details>
 
         <div class="duas">
-          <div class="secao">
-            <header><h2>Para onde foram <span class="dica" tabindex="0" data-tip="Boards para onde os clientes foram enviados no período.">?</span></h2></header>
-            <div class="tabela-wrap" id="tDestinos"></div>
-          </div>
-          <div class="secao">
-            <header><h2>Em que etapa desistiram <span class="dica" tabindex="0" data-tip="Coluna em que o card estava antes de ir para desistentes.">?</span></h2></header>
-            <div class="tabela-wrap" id="tEtapas"></div>
-          </div>
+          <details class="secao det" id="det-destinos">
+            <summary><span class="t">Para onde foram</span><span class="res" id="resDestinos"></span></summary>
+            <div class="corpo"><div class="tabela-wrap" id="tDestinos"></div></div>
+          </details>
+          <details class="secao det" id="det-etapas">
+            <summary><span class="t">Em que etapa desistiram</span><span class="res" id="resEtapas"></span></summary>
+            <div class="corpo">
+              <p class="nota">Coluna em que o card estava antes de ir para desistentes.</p>
+              <div class="tabela-wrap" id="tEtapas"></div>
+            </div>
+          </details>
         </div>
 
         <p class="nota" id="naoContados"></p>
         <details class="como">
           <summary>Como o painel conta</summary>
           <ul>
-            <li><b>Entrada:</b> card criado, copiado ou vindo de outro board.</li>
+            <li><b>Entrada:</b> card criado, copiado de outro board ou vindo de outro board. <b>Cópia feita dentro do próprio board não conta</b> (se ela depois sair para outro board ou cancelar, volta a contar e fica em Pendentes).</li>
             <li><b>Saída:</b> só o card enviado para <b>outro board</b>. Arquivados e excluídos não contam.</li>
             <li><b>Cancelamento:</b> card movido para a coluna de desistentes. É contado à parte e não vira saída.</li>
             <li><b>Saldo:</b> entradas − saídas − cancelamentos (quantos clientes ativos a mais ou a menos).</li>
-            <li><b>Engano:</b> card criado e removido (arquivado, excluído, cancelado ou enviado a outro board) em até 5 min é ignorado. Para <b>cópias</b>, o prazo para arquivar ou excluir é de 24 h, e copiar e enviar a outro board continua contando (projeto adicional).</li>
+            <li><b>Engano:</b> card criado e removido (arquivado, excluído, cancelado ou enviado a outro board) em até 5 min é ignorado. Cópia arquivada ou excluída em até 24 h também. Cópia enviada a outro board continua contando (projeto adicional).</li>
             <li><b>Voltou de outro board:</b> em até 24 h, nem a saída nem a nova entrada contam. Depois de 24 h conta saída e nova entrada, e o caso fica em <b>Pendentes</b> para você decidir.</li>
             <li><b>Desistentes:</b> saiu da coluna de desistentes continua só como cancelamento, sem nova entrada.</li>
             <li><b>Mesmo nº de cliente:</b> o número no início do nome do card (com 6 dígitos ou mais) é contado uma vez por mês, em cada tipo. Se o card parece ser de 2 projetos (etiqueta 2pack, "projeto_1/projeto_2" ou texto na descrição), ele não é ignorado e vai para <b>Pendentes</b>.</li>
             <li><b>Pendentes:</b> ficam contados provisoriamente. Ao confirmar "Conta" ou "Não conta", sua decisão é salva no Trello e vale para a equipe.</li>
             <li><b>Desarquivado:</b> se um card é desarquivado, a contagem volta atrás.</li>
+            <li><b>Comparação:</b> "vs. período anterior" compara com o período imediatamente anterior, do mesmo tamanho.</li>
           </ul>
         </details>
+        <div class="fim"></div>
       </section>
 
       <!-- GARGALOS -->
@@ -150,6 +159,12 @@
       <section id="aba-cards" role="tabpanel" hidden>
         <div class="secao">
           <div class="ferramentas">
+            <div class="chips" id="filtroTipo" role="group" aria-label="Filtrar por tipo">
+              <button class="chip" data-t="" aria-pressed="true">Todos</button>
+              <button class="chip" data-t="in" aria-pressed="false">Entradas</button>
+              <button class="chip" data-t="out" aria-pressed="false">Saídas</button>
+              <button class="chip" data-t="cancel" aria-pressed="false">Cancelamentos</button>
+            </div>
             <input type="search" id="buscaCards" placeholder="Buscar por card, motivo ou lista" aria-label="Buscar card">
             <span class="muted" id="contaCards"></span>
           </div>
