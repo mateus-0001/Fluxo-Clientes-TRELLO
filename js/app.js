@@ -91,7 +91,7 @@
       if (!fresco) {
         var desde = iv.comparar ? iv.prevSince : iv.since;
         setCarregando(true, 'Buscando as movimentações no Trello...');
-        var actions = await T.fetchActions(S.boardId, desde, iv.until, S.token);
+        var actions = await T.fetchActions(S.boardId, desde, null, S.token); // até agora, para enxergar o que aconteceu depois do período
         if (id !== S.reqId) return;
         var cardLabels = {}, cardInfo = {};
         S.avisoCarga = '';
@@ -161,12 +161,28 @@
       var etNomes = ((c.cardLabels && c.cardLabels[ev.id]) || []).map(function (lid) { return nomeEtiq[lid] || ''; });
       ev.doisProjetos = R.leDoisProjetos([ev.card.name, info && info.name], etNomes, [info && info.desc]);
     });
+    // Cópias: de onde veio o card de origem? (vendas copiando de outro board é o normal)
+    var saidaDoBoard = {}; // id do card -> última vez em que saiu deste board ou foi excluído
+    c.actions.forEach(function (a) {
+      if (a.type !== 'moveCardFromBoard' && a.type !== 'deleteCard') return;
+      var cid = a.data && a.data.card && a.data.card.id; if (!cid) return;
+      var dt = new Date(a.date);
+      if (!saidaDoBoard[cid] || dt > saidaDoBoard[cid]) saidaDoBoard[cid] = dt;
+    });
     evs.forEach(function (ev) {
       if (!ev.c.copia) return;
       var d = ev.a.data || {}, src = d.cardSource, bs = d.boardSource;
-      // cópia "interna" = o card de origem é deste mesmo board (vendas copiando de outro board é o normal)
-      if (bs && bs.id) ev.c.copiaInterna = bs.id === S.boardId;
-      else ev.c.copiaInterna = !!(src && src.id && c.cardLabels && (src.id in c.cardLabels));
+      if (bs && bs.id) {
+        ev.c.copiaInterna = bs.id === S.boardId;
+      } else if (src && src.id && c.cardLabels && (src.id in c.cardLabels)) {
+        ev.c.copiaInterna = true;                       // o card de origem ainda está neste board
+      } else if (src && src.id && saidaDoBoard[src.id] && saidaDoBoard[src.id] > ev.when) {
+        ev.c.copiaOrigemSaiu = true;                    // a origem estava aqui e saiu depois: pede confirmação
+      }
+      ev.c.motivo = !src || !src.id ? 'Copiado (origem não informada pelo Trello)'
+        : ev.c.copiaInterna ? 'Copiado dentro do próprio board'
+        : ev.c.copiaOrigemSaiu ? 'Copiado (a origem estava neste board e saiu depois)'
+        : 'Copiado de outro board';
     });
     var kept = R.processar(evs, S.cfg.janela ? 5 * 60000 : 0);
     R.aplicarDecisoes(kept, S.decisoes);
