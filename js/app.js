@@ -22,9 +22,9 @@
 
   var S = {
     boardId: null, token: null, boardNome: '', listas: [], labels: [],
-    prefs: { periodo: '30', de: '', ate: '', etiqueta: '', aba: 'resumo' },
+    prefs: { periodo: '30', de: '', ate: '', etiqueta: '', aba: 'resumo', abertos: {} },
     cfg: { listaDesist: '', janela: true, dedup: true },
-    cache: null, reqId: 0, res: null, tabelas: {}, avisoCarga: '', decisoes: {}
+    cache: null, reqId: 0, res: null, tabelas: {}, avisoCarga: '', decisoes: {}, filtroTipo: ''
   };
 
   // ---------- Tema ----------
@@ -161,6 +161,13 @@
       var etNomes = ((c.cardLabels && c.cardLabels[ev.id]) || []).map(function (lid) { return nomeEtiq[lid] || ''; });
       ev.doisProjetos = R.leDoisProjetos([ev.card.name, info && info.name], etNomes, [info && info.desc]);
     });
+    evs.forEach(function (ev) {
+      if (!ev.c.copia) return;
+      var d = ev.a.data || {}, src = d.cardSource, bs = d.boardSource;
+      // cópia "interna" = o card de origem é deste mesmo board (vendas copiando de outro board é o normal)
+      if (bs && bs.id) ev.c.copiaInterna = bs.id === S.boardId;
+      else ev.c.copiaInterna = !!(src && src.id && c.cardLabels && (src.id in c.cardLabels));
+    });
     var kept = R.processar(evs, S.cfg.janela ? 5 * 60000 : 0);
     R.aplicarDecisoes(kept, S.decisoes);
     if (S.cfg.dedup) R.deduplicarNumeros(kept);
@@ -194,7 +201,7 @@
     kpis.prev = iv.comparar ? R.contar(anterior) : null;
 
     var linhas = contados.map(function (ev) {
-      return { date: ev.when, tipo: ev.tipo, motivo: ev.c.motivo, card: ev.card.name || '(sem nome)',
+      return { date: ev.when, tipo: ev.tipo, motivo: ev.c.motivo, card: ev.card.name || '(sem nome)', link: urlCard(ev.card),
                origem: ev.c.origem, destino: ev.c.destino,
                quem: (ev.a.memberCreator && ev.a.memberCreator.fullName) || '',
                obs: ev.decidido ? 'Confirmado por você: ' + (ev.decidido === 'c' ? 'conta' : 'não conta')
@@ -220,11 +227,22 @@
   }
 
   // ---------- Tabelas (ordenar, buscar, mostrar mais) ----------
+  // Abre o card em outra aba do navegador (cards excluídos não têm mais página)
+  function urlCard(card, excluido) {
+    var ref = card && (card.shortLink || card.id);
+    return !excluido && ref ? 'https://trello.com/c/' + ref : '';
+  }
+  function linkCard(url, html) {
+    return url ? '<a class="lk" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" title="Abrir o card no Trello">' + html + '</a>' : html;
+  }
+  function linkEv(ev, html) { return linkCard(urlCard(ev.card, ev.c && ev.c.sub === 'excluido'), html); }
+
   function criarTabela(el, cols, o) {
     o = o || {};
     var st = { rows: [], sortK: o.sortK || null, dir: o.dir || -1, limite: 50, busca: '' };
     function lista() {
       var r = st.rows;
+      if (st.extra) r = r.filter(st.extra);
       if (st.busca) {
         var q = st.busca.toLowerCase();
         r = r.filter(function (x) { return o.texto(x).toLowerCase().indexOf(q) >= 0; });
@@ -275,7 +293,8 @@
     });
     return {
       set: function (rows) { st.rows = rows; st.limite = 50; render(); },
-      busca: function (q) { st.busca = q || ''; st.limite = 50; render(); }
+      busca: function (q) { st.busca = q || ''; st.limite = 50; render(); },
+      filtrar: function (fn) { st.extra = fn || null; st.limite = 50; render(); }
     };
   }
 
@@ -332,8 +351,8 @@
     ], { sortK: 'media', dir: -1, vazioTitulo: 'Sem dados de tempo', vazioTexto: 'Nenhum cliente saiu ou cancelou neste período.' });
 
     S.tabelas.clientes = criarTabela($('tClientes'), [
-      { k: 'numero', t: 'Nº', v: function (r) { return r.numero; }, h: function (r) { return esc(r.numero) || '—'; } },
-      { k: 'nome', t: 'Nome', v: function (r) { return (r.nome || r.card).toLowerCase(); }, h: function (r) { return '<b>' + esc(r.nome || r.card) + '</b>'; } },
+      { k: 'numero', t: 'Nº', v: function (r) { return r.numero; }, h: function (r) { return r.numero ? linkCard(urlCard({ shortLink: r.shortLink, id: r.id }), esc(r.numero)) : '—'; } },
+      { k: 'nome', t: 'Nome', v: function (r) { return (r.nome || r.card).toLowerCase(); }, h: function (r) { return linkCard(urlCard({ shortLink: r.shortLink, id: r.id }), '<b>' + esc(r.nome || r.card) + '</b>'); } },
       { k: 'situacao', t: 'Situação', v: function (r) { return r.situacao; }, h: function (r) {
           return r.situacao === 'out' ? '<span class="pill out">Saiu → ' + esc(r.destino) + '</span>' : '<span class="pill cancel">Cancelou' + (r.etapa ? ' em ' + esc(r.etapa) : '') + '</span>'; } },
       { k: 'entrada', t: 'Entrada', v: function (r) { return r.entrada.getTime(); }, h: function (r) { return R.fmtFull(r.entrada); } },
@@ -347,7 +366,7 @@
     S.tabelas.cards = criarTabela($('tCards'), [
       { k: 'date', t: 'Data', v: function (r) { return r.date.getTime(); }, h: function (r) { return R.fmtFull(r.date) + ' <span class="muted">' + R.fmtHora(r.date) + '</span>'; } },
       { k: 'tipo', t: 'Tipo', v: function (r) { return r.tipo; }, h: function (r) { return pill(r.tipo); } },
-      { k: 'card', t: 'Card', v: function (r) { return r.card.toLowerCase(); }, h: function (r) { return '<b>' + esc(r.card) + '</b>'; } },
+      { k: 'card', t: 'Card', v: function (r) { return r.card.toLowerCase(); }, h: function (r) { return linkCard(r.link, '<b>' + esc(r.card) + '</b>'); } },
       { k: 'motivo', t: 'Motivo', v: function (r) { return r.motivo; }, h: function (r) { return esc(r.motivo); } },
       { k: 'origem', t: 'Lista de origem', v: function (r) { return r.origem; }, h: function (r) { return esc(r.origem) || '—'; } },
       { k: 'destino', t: 'Lista de destino', v: function (r) { return r.destino; }, h: function (r) { return esc(r.destino) || '—'; } },
@@ -359,7 +378,7 @@
     S.tabelas.ignorados = criarTabela($('tIgnorados'), [
       { k: 'date', t: 'Data', v: function (r) { return r.when.getTime(); }, h: function (r) { return R.fmtFull(r.when) + ' <span class="muted">' + R.fmtHora(r.when) + '</span>'; } },
       { k: 'tipo', t: 'Evento', v: function (r) { return r.tipo; }, h: function (r) { return pill(r.tipo); } },
-      { k: 'card', t: 'Card', v: function (r) { return (r.card.name || '').toLowerCase(); }, h: function (r) { return '<b>' + esc(r.card.name || '(sem nome)') + '</b>'; } },
+      { k: 'card', t: 'Card', v: function (r) { return (r.card.name || '').toLowerCase(); }, h: function (r) { return linkEv(r, '<b>' + esc(r.card.name || '(sem nome)') + '</b>'); } },
       { k: 'motivo', t: 'O que foi', v: function (r) { return r.c.motivo; }, h: function (r) { return esc(r.c.motivo); } },
       { k: 'porque', t: 'Por que foi ignorado', v: function (r) { return r.ign; }, h: function (r) { return esc(r.ign); } },
       { k: 'acao', t: 'Ação', v: null, h: function (r) {
@@ -369,7 +388,7 @@
     S.tabelas.pendentes = criarTabela($('tPendentes'), [
       { k: 'date', t: 'Data', v: function (r) { return r.when.getTime(); }, h: function (r) { return R.fmtFull(r.when) + ' <span class="muted">' + R.fmtHora(r.when) + '</span>'; } },
       { k: 'tipo', t: 'Evento', v: function (r) { return r.tipo; }, h: function (r) { return pill(r.tipo); } },
-      { k: 'card', t: 'Card', v: function (r) { return (r.card.name || '').toLowerCase(); }, h: function (r) { return '<b>' + esc(r.card.name || '(sem nome)') + '</b>'; } },
+      { k: 'card', t: 'Card', v: function (r) { return (r.card.name || '').toLowerCase(); }, h: function (r) { return linkEv(r, '<b>' + esc(r.card.name || '(sem nome)') + '</b>'); } },
       { k: 'pend', t: 'Por que precisa de confirmação', v: function (r) { return r.pend.join(' '); }, h: function (r) { return esc(r.pend.join(' · ')); } },
       { k: 'acao', t: 'Contar?', v: null, h: function (r) { return botaoDecisao(r, 'c', 'Conta') + ' ' + botaoDecisao(r, 'n', 'Não conta'); } }
     ], { sortK: 'date', dir: -1, vazioTitulo: 'Nada pendente', vazioTexto: 'Nenhum caso precisa da sua confirmação neste período.',
@@ -378,7 +397,7 @@
     S.tabelas.decididos = criarTabela($('tDecididos'), [
       { k: 'date', t: 'Data', v: function (r) { return r.when.getTime(); }, h: function (r) { return R.fmtFull(r.when) + ' <span class="muted">' + R.fmtHora(r.when) + '</span>'; } },
       { k: 'tipo', t: 'Evento', v: function (r) { return r.tipo; }, h: function (r) { return pill(r.tipo); } },
-      { k: 'card', t: 'Card', v: function (r) { return (r.card.name || '').toLowerCase(); }, h: function (r) { return '<b>' + esc(r.card.name || '(sem nome)') + '</b>'; } },
+      { k: 'card', t: 'Card', v: function (r) { return (r.card.name || '').toLowerCase(); }, h: function (r) { return linkEv(r, '<b>' + esc(r.card.name || '(sem nome)') + '</b>'); } },
       { k: 'dec', t: 'Sua decisão', v: function (r) { return r.decidido; }, h: function (r) { return r.decidido === 'c' ? '<b style="color:var(--in)">Conta</b>' : '<b style="color:var(--cancel)">Não conta</b>'; } },
       { k: 'acao', t: 'Ação', v: null, h: function (r) { return botaoDecisao(r, 'x', 'Desfazer'); } }
     ], { sortK: 'date', dir: -1, vazioTitulo: 'Nenhuma decisão', vazioTexto: 'Você ainda não confirmou nenhum caso neste período.' });
@@ -408,19 +427,24 @@
     if (ant == null) return '<span class="delta">sem comparação</span>';
     var d = atual - ant, seta = d > 0 ? '▲' : d < 0 ? '▼' : '●';
     var cls = (d === 0 || bomSobe === null) ? '' : ((d > 0) === bomSobe ? 'bom' : 'ruim');
-    return '<span class="delta ' + cls + '">' + seta + ' ' + (d > 0 ? '+' : '') + d + ' <small>vs. anterior (' + ant + ')</small></span>';
+    var iv = S.res && S.res.iv, dica = iv ? 'Período anterior: ' + R.fmtFull(iv.prevSince) + ' a ' + R.fmtFull(new Date(iv.since.getTime() - 1)) + ' (' + ant + ')' : '';
+    return '<span class="delta ' + cls + '" title="' + esc(dica) + '">' + seta + ' ' + (d > 0 ? '+' : '') + d + ' <small>vs. período anterior (' + ant + ')</small></span>';
   }
 
   function renderKpis() {
     var k = S.res.kpis, p = k.prev;
     $('kpis').innerHTML =
-      '<div class="kpi in"><div class="rot">' + ICONES.entrada + 'Entradas</div><div class="valor">' + k.in + '</div>' + deltaHtml(k.in, p && p.in, true) + '</div>' +
-      '<div class="kpi out"><div class="rot">' + ICONES.saida + 'Saídas</div><div class="valor">' + k.out + '</div>' + deltaHtml(k.out, p && p.out, null) +
-        '<div class="extra">Enviados a outro board</div></div>' +
-      '<div class="kpi cancel"><div class="rot">' + ICONES.cancelar + 'Cancelamentos</div><div class="valor">' + k.cancel + '</div>' + deltaHtml(k.cancel, p && p.cancel, false) +
-        '<div class="extra">Taxa: <b>' + taxaTxt(k.taxa) + '</b> das entradas</div></div>' +
-      '<div class="kpi saldo ' + (k.saldo < 0 ? 'neg' : k.saldo > 0 ? 'pos' : '') + '"><div class="rot">' + ICONES.saldo + 'Saldo</div><div class="valor">' + (k.saldo > 0 ? '+' : '') + k.saldo + '</div>' +
-        deltaHtml(k.saldo, p && p.saldo, true) + '<div class="extra">Entradas − saídas − cancelamentos</div></div>';
+      '<div class="kpi in clicavel" role="button" tabindex="0" data-tipo="in" title="Ver a lista de entradas"><div class="rot">' + ICONES.entrada + 'Entradas</div><div class="valor">' + k.in + '</div>' + deltaHtml(k.in, p && p.in, true) +
+        '<div class="ver">Ver lista ›</div></div>' +
+      '<div class="kpi out clicavel" role="button" tabindex="0" data-tipo="out" title="Ver a lista de saídas"><div class="rot">' + ICONES.saida + 'Saídas</div><div class="valor">' + k.out + '</div>' + deltaHtml(k.out, p && p.out, null) +
+        '<div class="extra">Enviados a outro board</div><div class="ver">Ver lista ›</div></div>' +
+      '<div class="kpi cancel clicavel" role="button" tabindex="0" data-tipo="cancel" title="Ver a lista de cancelamentos"><div class="rot">' + ICONES.cancelar + 'Cancelamentos</div><div class="valor">' + k.cancel + '</div>' + deltaHtml(k.cancel, p && p.cancel, false) +
+        '<div class="extra">Taxa: <b>' + taxaTxt(k.taxa) + '</b> das entradas</div><div class="ver">Ver lista ›</div></div>' +
+      '<div class="kpi saldo clicavel ' + (k.saldo < 0 ? 'neg' : k.saldo > 0 ? 'pos' : '') + '" role="button" tabindex="0" data-tipo="" title="Ver todas as movimentações"><div class="rot">' + ICONES.saldo + 'Saldo</div><div class="valor">' + (k.saldo > 0 ? '+' : '') + k.saldo + '</div>' +
+        deltaHtml(k.saldo, p && p.saldo, true) + '<div class="extra">Entradas − saídas − cancelamentos</div><div class="ver">Ver lista ›</div></div>';
+    var iv = S.res.iv;
+    $('notaComparacao').textContent = p ? '"vs. período anterior" compara com os mesmos ' + Math.round(iv.span) + ' dias antes: ' + R.fmtFull(iv.prevSince) + ' a ' + R.fmtFull(new Date(iv.since.getTime() - 1)) + '.'
+      : 'Sem comparação com período anterior neste período.';
   }
 
   function maxDe(lista, f) { return lista.reduce(function (m, x) { return Math.max(m, f(x)); }, 0); }
@@ -435,6 +459,11 @@
     $('subtitulo').textContent = (S.boardNome ? S.boardNome + ' · ' : '') + r.iv.texto;
     renderKpis();
     $('tituloSerie').textContent = 'Evolução por ' + (r.serieRotulo === 'Dia' ? 'dia' : 'semana');
+    var plural = function (n, um, varios) { return n + ' ' + (n === 1 ? um : varios); };
+    $('resSerie').textContent = plural(r.serie.length, r.serieRotulo === 'Dia' ? 'dia' : 'semana', r.serieRotulo === 'Dia' ? 'dias' : 'semanas') + ' com movimentação';
+    $('resEtiquetas').textContent = plural(r.etiquetas.length, 'etiqueta', 'etiquetas');
+    $('resDestinos').textContent = plural(r.destinos.length, 'board', 'boards') + ' · ' + plural(r.kpis.out, 'cliente', 'clientes');
+    $('resEtapas').textContent = plural(r.etapas.length, 'etapa', 'etapas') + ' · ' + plural(r.kpis.cancel, 'cancelamento', 'cancelamentos');
     S.tabelas.serie.set(r.serie);
     S.tabelas.etiquetas.set(r.etiquetas);
     S.tabelas.destinos.set(r.destinos);
@@ -442,6 +471,7 @@
     S.tabelas.gargalos.set(r.gargalos);
     S.tabelas.clientes.set(r.clientes);
     S.tabelas.cards.set(r.linhas);
+    aplicarFiltroTipo();
     S.tabelas.ignorados.set(r.ignorados);
     S.tabelas.pendentes.set(r.pendentes);
     S.tabelas.decididos.set(r.decididos);
@@ -460,6 +490,20 @@
     $('destaqueGargalo').innerHTML = g && g.media > 0
       ? '<div class="destaque">Maior gargalo: <b>' + esc(g.nome) + '</b>, com tempo médio de ' + R.fmtTempo(g.media) + ' (' + g.n + ' cliente' + (g.n === 1 ? '' : 's') + ').</div>' : '';
     atualizarBadgeFiltros();
+  }
+
+  // ---------- Lista filtrada por tipo (clique nos quadros de números) ----------
+  function aplicarFiltroTipo() {
+    Array.prototype.forEach.call(document.querySelectorAll('#filtroTipo .chip'), function (b) {
+      b.setAttribute('aria-pressed', b.getAttribute('data-t') === S.filtroTipo ? 'true' : 'false');
+    });
+    S.tabelas.cards.filtrar(S.filtroTipo ? function (r) { return r.tipo === S.filtroTipo; } : null);
+  }
+  function verLista(tipo) {
+    S.filtroTipo = tipo || '';
+    $('buscaCards').value = ''; S.tabelas.cards.busca('');
+    aplicarFiltroTipo();
+    mostrarAba('cards'); salvarPrefs();
   }
 
   // ---------- Abas, filtros e preferências ----------
@@ -542,7 +586,7 @@
     var nome = 'fluxo-clientes-' + R.isoDia(new Date()) + '.xlsx', d = dadosExcel();
     try {
       await X.baixarBonito(d, nome);
-      toast('Planilha gerada. Se o download não começou, use a versão simples.', { txt: 'Baixar versão simples', fn: function () { X.baixarSimples(d, nome); } });
+      toast('Planilha gerada.');
     } catch (e) {
       try { X.baixarSimples(d, nome); toast('Não consegui gerar a planilha formatada (' + e.message + '). Baixei a versão simples.'); }
       catch (e2) { toast('Não consegui gerar o Excel: ' + e2.message); }
@@ -596,6 +640,10 @@
     $('de').value = S.prefs.de; $('ate').value = S.prefs.ate;
     $('btnAtualizar').innerHTML = ICONES.atualizar; $('btnFechar').innerHTML = ICONES.fechar;
     criarTabelas();
+    ['serie', 'etiquetas', 'destinos', 'etapas'].forEach(function (k) {
+      var det = $('det-' + k); det.open = !!(S.prefs.abertos && S.prefs.abertos[k]);
+      det.addEventListener('toggle', function () { S.prefs.abertos = S.prefs.abertos || {}; S.prefs.abertos[k] = det.open; salvarPrefs(); });
+    });
     marcarPeriodo(); mostrarAba(S.prefs.aba);
     atualizarBadgeFiltros();
     await carregar(false);
@@ -625,6 +673,17 @@
     $('listaDesist').onchange = function () { S.cfg.listaDesist = $('listaDesist').value; salvarPrefs(); recalcular(); };
     $('janela').onchange = function () { S.cfg.janela = $('janela').checked; salvarPrefs(); recalcular(); };
     $('dedup').onchange = function () { S.cfg.dedup = $('dedup').checked; salvarPrefs(); recalcular(); };
+    $('kpis').addEventListener('click', function (e) {
+      var k = e.target.closest('.kpi[data-tipo]'); if (k) verLista(k.getAttribute('data-tipo'));
+    });
+    $('kpis').addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      var k = e.target.closest('.kpi[data-tipo]'); if (k) { e.preventDefault(); verLista(k.getAttribute('data-tipo')); }
+    });
+    $('filtroTipo').addEventListener('click', function (e) {
+      var b = e.target.closest('.chip'); if (!b) return;
+      S.filtroTipo = b.getAttribute('data-t'); aplicarFiltroTipo();
+    });
     $('abas').addEventListener('click', function (e) {
       var b = e.target.closest('.aba'); if (!b) return;
       mostrarAba(b.getAttribute('data-aba')); salvarPrefs();
