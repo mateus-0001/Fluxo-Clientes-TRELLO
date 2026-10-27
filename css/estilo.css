@@ -22,7 +22,7 @@ body.dark {
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 body {
-  margin: 0; padding: 0 16px 24px; background: var(--bg); color: var(--fg); overflow-y: auto;
+  margin: 0; padding: 0 16px 56px; background: var(--bg); color: var(--fg); overflow-y: auto;
   font: 14px/1.45 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 [hidden] { display: none !important; }
@@ -174,6 +174,35 @@ details.como li { margin: 3px 0; }
 .mini-btn.ok { color: var(--in); border-color: var(--in); }
 .mini-btn.nao { color: var(--cancel); border-color: var(--cancel); }
 .aba.alerta .n { background: var(--warn-bg); color: var(--warn); }
+
+.kpi.clicavel { cursor: pointer; transition: transform .12s, box-shadow .12s; }
+.kpi.clicavel:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(9, 30, 66, .18); }
+.kpi.clicavel:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.kpi .ver { font-size: 11px; color: var(--muted); margin-top: 6px; font-weight: 600; }
+.kpi.clicavel:hover .ver { color: var(--primary); }
+a.lk { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--muted); }
+a.lk:hover { color: var(--primary); border-bottom-color: var(--primary); }
+
+/* ---------- Seções que abrem e fecham ---------- */
+details.det { padding: 0; margin-bottom: 16px; }
+details.det > summary {
+  list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  padding: 16px 18px; border-radius: var(--radius);
+}
+details.det > summary::-webkit-details-marker { display: none; }
+details.det > summary::before { content: "▸"; color: var(--muted); font-size: 13px; width: 10px; transition: transform .15s; display: inline-block; }
+details.det[open] > summary::before { transform: rotate(90deg); }
+details.det > summary:hover { background: var(--surface2); }
+details.det > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+details.det .t { font-weight: 700; font-size: 14px; }
+details.det .res { font-size: 12px; color: var(--muted); }
+details.det .corpo { padding: 0 18px 18px; }
+.duas { align-items: start; gap: 16px; }
+.duas details.det { margin-bottom: 0; }
+.nota { margin: 6px 0 10px; }
+details.como { margin: 22px 0 8px; padding: 14px 18px; background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); }
+details.como li { margin: 6px 0; }
+.fim { height: 40px; }
 
 /* ---------- Carregando ---------- */
 .carregando .kpi .valor, .carregando .secao .tabela-wrap { position: relative; color: transparent !important; }
