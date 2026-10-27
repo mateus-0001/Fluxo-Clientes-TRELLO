@@ -111,6 +111,7 @@
   var MOTIVO_VOLTOU_SAIDA = 'Voltou de outro board em até 24 h: a saída foi desfeita';
   var PEND_RETORNO = 'Voltou de outro board depois de mais de 24 h: é um projeto novo ou o mesmo projeto?';
   var MOTIVO_COPIA_INTERNA = 'Cópia feita dentro do próprio board: não conta como entrada';
+  var PEND_COPIA_ORIGEM_SAIU = 'Cópia de um card que estava neste board e depois saiu ou foi excluído: foi cópia feita aqui ou veio de outro board?';
   var PEND_COPIA_INTERNA = 'Cópia feita no próprio board que depois saiu: é um projeto adicional?';
   var PEND_DOIS = 'Parece ser de 2 projetos (etiqueta 2pack, nome ou descrição): confirme se conta';
   var PEND_REPETIDO = 'Mesmo nº de cliente já contado no mês, mas o card parece ser de outro projeto: confirme se conta';
@@ -147,6 +148,7 @@
             addPend(ev, PEND_RETORNO);
           }
           if (ev.c && ev.c.copia && ev.c.copiaInterna) ev.ign = MOTIVO_COPIA_INTERNA;
+          else if (ev.c && ev.c.copia && ev.c.copiaOrigemSaiu) addPend(ev, PEND_COPIA_ORIGEM_SAIU);
           status[id] = 'in'; ultEntrada[id] = ev; out.push(ev);
           break;
 
