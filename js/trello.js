@@ -56,26 +56,48 @@
     return { labels: labels, info: info };
   };
 
-  // Busca as etiquetas atuais dos cards enviados a outros quadros.
-  // O ID do card permanece o mesmo na transferencia; etiquetas podem mudar.
-  // Faz consulta tambem quando a lista local esta vazia, e mostra diagnostico.
+  // Recupera etiquetas de cards transferidos usando o mesmo ID do card.
+  // Importante: "fields" deve incluir "labels"; caso contrario a API
+  // devolve HTTP 200 sem o campo e tudo aparece como "Sem etiqueta".
   T.fetchEtiquetasDeCardsTransferidos = async function (actions, cardLabels, token) {
-    var ids = {}, result = {}, falhas = [], ok = 0;
+    var ids = {}, result = {}, falhas = [], ok = 0, fallbackUsado = 0;
     (actions || []).forEach(function (a) {
       if (a.type !== 'moveCardFromBoard') return;
       var id = a.data && a.data.card && a.data.card.id;
-      if (!id) return;
-      if (!cardLabels || !cardLabels[id] || !cardLabels[id].length) ids[id] = true;
+      if (id && (!cardLabels || !cardLabels[id] || !cardLabels[id].length)) ids[id] = true;
     });
     var pendentes = Object.keys(ids), indice = 0;
+    function nomesValidos(etiquetas) {
+      if (!Array.isArray(etiquetas)) return [];
+      var vistos = {};
+      return etiquetas.map(function (l) {
+        return typeof l === 'string' ? '' : (l && l.name) || '';
+      }).map(function (nome) { return String(nome).trim(); })
+        .filter(function (nome) {
+          if (!nome || vistos[nome.toUpperCase()]) return false;
+          vistos[nome.toUpperCase()] = true;
+          return true;
+        });
+    }
     async function worker() {
       while (indice < pendentes.length) {
         var id = pendentes[indice++];
         try {
-          var c = await buscar(BASE + '/cards/' + encodeURIComponent(id) +
-            '?fields=id,name&labels=all&label_fields=name' + cred(token),
+          // A versao antiga usava fields=id,name, excluindo o campo labels.
+          var card = await buscar(BASE + '/cards/' + encodeURIComponent(id) +
+            '?fields=id,name,labels,idLabels&labels=all&label_fields=name' + cred(token),
             'ao buscar etiquetas de card transferido');
-          result[id] = (c.labels || []).map(function (l) { return l.name || ''; }).filter(Boolean);
+          var nomes = nomesValidos(card.labels);
+          // Se o GET do card nao trouxer os nomes, consulta o endpoint
+          // dedicado de etiquetas (ele devolve um array de objetos com name).
+          if (!nomes.length) {
+            fallbackUsado++;
+            var ls = await buscar(BASE + '/cards/' + encodeURIComponent(id) +
+              '/labels?fields=name&limit=1000' + cred(token),
+              'ao buscar a lista de etiquetas do card');
+            nomes = nomesValidos(ls);
+          }
+          result[id] = nomes;
           ok++;
         } catch (e) {
           falhas.push({ id: id, status: e.status || 0 });
@@ -83,9 +105,15 @@
       }
     }
     await Promise.all([worker(), worker(), worker(), worker()]);
-    result._diagnostico = { consultados: pendentes.length, acessiveis: ok,
-      semEtiquetas: Object.keys(result).filter(function (id) { return id !== '_diagnostico' && result[id].length === 0; }).length,
-      falhas: falhas.length, semPermissao: falhas.filter(function (f) { return f.status === 401 || f.status === 403; }).length };
+    result._diagnostico = {
+      consultados: pendentes.length, acessiveis: ok,
+      semEtiquetas: Object.keys(result).filter(function (id) {
+        return id !== '_diagnostico' && result[id].length === 0;
+      }).length,
+      falhas: falhas.length,
+      semPermissao: falhas.filter(function (f) { return f.status === 401 || f.status === 403; }).length,
+      fallbackUsado: fallbackUsado
+    };
     return result;
   };
 
