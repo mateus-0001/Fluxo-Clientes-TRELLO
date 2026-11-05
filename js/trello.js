@@ -56,6 +56,32 @@
     return { labels: labels, info: info };
   };
 
+  // Cards ja transferidos podem nao aparecer em /boards/{board}/cards/all.
+  // Consulta diretamente as etiquetas dos cards acessiveis nos quadros de destino.
+  // Falhas de permissao/404 nao impedem a contagem de atendimentos.
+  T.fetchEtiquetasDeCardsTransferidos = async function (actions, cardLabels, token) {
+    var ids = {}, result = {};
+    (actions || []).forEach(function (a) {
+      var id = a && a.data && a.data.card && a.data.card.id;
+      if (id && !Object.prototype.hasOwnProperty.call(cardLabels || {}, id)) ids[id] = true;
+    });
+    var pendentes = Object.keys(ids);
+    var indice = 0;
+    async function worker() {
+      while (indice < pendentes.length) {
+        var id = pendentes[indice++];
+        try {
+          var c = await buscar(BASE + '/cards/' + encodeURIComponent(id) +
+            '?fields=id,name&labels=all&label_fields=name' + cred(token),
+            'ao buscar etiquetas de card transferido');
+          result[id] = (c.labels || []).map(function (l) { return l.name || ''; }).filter(Boolean);
+        } catch (e) { /* card inacessivel, excluido ou sem permissao */ }
+      }
+    }
+    await Promise.all([worker(), worker(), worker(), worker()]);
+    return result;
+  };
+
   T.fetchLabels = async function (boardId, token) {
     try { return await buscar(BASE + '/boards/' + boardId + '/labels?fields=name,color&limit=1000' + cred(token)); }
     catch (e) { return []; }
