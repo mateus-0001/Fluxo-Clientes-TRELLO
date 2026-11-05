@@ -228,3 +228,10 @@ details.como li { margin: 6px 0; }
   .duas { grid-template-columns: 1fr; }
   .kpi .valor { font-size: 28px; }
 }
+
+/* Painel adicional: separa clientes, atendimentos e projetos. */
+.painel-projetos { margin-top: 14px; }
+.projetos-grade { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:10px; margin:12px 0; }
+.projetos-grade > div { border:1px solid var(--line); border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:7px; }
+.projetos-grade span { font-size:12px; color:var(--muted); }
+.projetos-grade strong { font-size:23px; font-weight:750; }
