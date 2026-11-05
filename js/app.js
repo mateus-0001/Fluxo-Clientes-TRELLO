@@ -1,7 +1,7 @@
 /* A tela: botões, filtros, abas, tabelas e exportação. As contas ficam em regras.js. */
 (function () {
   'use strict';
-  var R = window.Regras, T = window.TrelloApi, X = window.ExcelFlow;
+  var R = window.Regras, T = window.TrelloApi, X = window.ExcelFlow, P = window.ProjetosFlow;
   var t = TrelloPowerUp.iframe({ appKey: window.APP_KEY, appName: window.APP_NAME });
   var $ = function (id) { return document.getElementById(id); };
   var esc = R.esc;
@@ -225,7 +225,7 @@
     }).sort(function (a, b) { return b.date - a.date; });
 
     S.res = {
-      iv: iv, kpis: kpis, serieRotulo: iv.span > 31 ? 'Semana de' : 'Dia', serie: R.serie(contados, iv.span),
+      iv: iv, kpis: kpis, projetos: P.resumir(contados, c.cardLabels, S.labels, c.cardInfo, R), serieRotulo: iv.span > 31 ? 'Semana de' : 'Dia', serie: R.serie(contados, iv.span),
       etiquetas: R.porEtiqueta(contados, clientes, c.cardLabels, S.labels),
       destinos: R.destinos(contados), etapas: R.etapasDesistencia(contados),
       colunas: colunas, clientes: clientes, gargalos: R.gargalos(clientes, colunas),
@@ -463,6 +463,27 @@
       : 'Sem comparação com período anterior neste período.';
   }
 
+  function renderProjetos() {
+    var el = $('painelProjetos'); if (!el || !S.res) return;
+    var p = S.res.projetos, k = p.atendimentos;
+    function numero(n) { return '<strong>' + n + '</strong>'; }
+    el.innerHTML =
+      '<h2>Clientes, atendimentos e projetos</h2>' +
+      '<p class="muted">Clientes únicos consideram o número de telefone nas entradas. Uma compra posterior pode ser outro atendimento.</p>' +
+      '<div class="projetos-grade">' +
+      '<div><span>Clientes únicos identificados</span>' + numero(p.clientesUnicos) + '</div>' +
+      '<div><span>Atendimentos recebidos</span>' + numero(k.in) + '</div>' +
+      '<div><span>Projetos recebidos identificados</span>' + numero(p.projetosConfirmados.in) + '</div>' +
+      '<div><span>Projetos encaminhados identificados</span>' + numero(p.projetosConfirmados.out) + '</div>' +
+      '<div><span>Logos recebidos / encaminhados</span>' + numero(p.logo.in + ' / ' + p.logo.out) + '</div>' +
+      '<div><span>Sites recebidos / encaminhados</span>' + numero(p.site.in + ' / ' + p.site.out) + '</div>' +
+      '</div>' +
+      '<p class="muted">Sem classificação segura: ' + p.semClassificacao.in + ' entradas e ' +
+      p.semClassificacao.out + ' saídas. Desses, ' + p.doisSemTipo.in +
+      ' recebimentos possuem indício de 2 projetos sem tipo definido. ' +
+      p.semIdentificador + ' entradas não têm número identificável. <b>Os totais de projetos são parciais</b> até classificar esses casos.</p>';
+  }
+
   function maxDe(lista, f) { return lista.reduce(function (m, x) { return Math.max(m, f(x)); }, 0); }
 
   function renderTudo() {
@@ -474,6 +495,7 @@
     };
     $('subtitulo').textContent = (S.boardNome ? S.boardNome + ' · ' : '') + r.iv.texto;
     renderKpis();
+    renderProjetos();
     $('tituloSerie').textContent = 'Evolução por ' + (r.serieRotulo === 'Dia' ? 'dia' : 'semana');
     var plural = function (n, um, varios) { return n + ' ' + (n === 1 ? um : varios); };
     $('resSerie').textContent = plural(r.serie.length, r.serieRotulo === 'Dia' ? 'dia' : 'semana', r.serieRotulo === 'Dia' ? 'dias' : 'semanas') + ' com movimentação';
@@ -588,7 +610,7 @@
     var r = S.res;
     return {
       titulo: 'Entradas x Saídas de clientes', boardNome: S.boardNome, periodoTxt: r.iv.texto, filtrosTxt: filtrosTxt(), geradoEm: new Date(),
-      kpis: r.kpis, serieRotulo: r.serieRotulo,
+      kpis: r.kpis, projetos: r.projetos, serieRotulo: r.serieRotulo,
       serie: r.serie.map(function (s) { return { rotulo: R.fmt(new Date(s.k)), in: s.in, out: s.out, cancel: s.cancel, saldo: s.saldo }; }),
       etiquetas: r.etiquetas, destinos: r.destinos, etapas: r.etapas, colunas: r.colunas, clientes: r.clientes.slice().sort(function (a, b) { return b.saida - a.saida; }), gargalos: r.gargalos,
       cards: r.linhas,
