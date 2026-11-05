@@ -236,34 +236,7 @@
       linhas: linhas, ignorados: ignorados, pendentes: pendentes, decididos: decididos,
       naoContados: { arquivados: Object.keys(arq).length, excluidos: Object.keys(exc).length }
     };
-    // Diagnostico temporario de leitura das etiquetas em cards transferidos.
-    // Nao altera nenhuma contagem: apenas expõe a origem do problema.
-    var saidasContadas = contados.filter(function (ev) { return ev.tipo === 'out'; });
-    var saidasUnicas = {};
-    saidasContadas.forEach(function (ev) { saidasUnicas[ev.id] = true; });
-    var idsSaidas = Object.keys(saidasUnicas);
-    var saidasComEtiquetaLocal = 0, saidasComEtiquetaExterna = 0, saidasSemEtiqueta = 0;
-    idsSaidas.forEach(function (cid) {
-      var local = (c.cardLabels && c.cardLabels[cid]) || [];
-      var externa = (c.etiquetasExternas && c.etiquetasExternas[cid]) || [];
-      if (local.length) saidasComEtiquetaLocal++;
-      if (externa.length) saidasComEtiquetaExterna++;
-      if (!local.length && !externa.length) saidasSemEtiqueta++;
-    });
-    var detalheDiagnostico = diagEtiquetas ?
-      ('Consultados: ' + diagEtiquetas.consultados +
-       ' · Acessíveis: ' + diagEtiquetas.acessiveis +
-       ' · Sem etiqueta retornada: ' + diagEtiquetas.semEtiquetas +
-       ' · Falhas: ' + diagEtiquetas.falhas +
-       ' · Erros 401/403: ' + diagEtiquetas.semPermissao) : 'Consulta externa não executada';
-    var avisoDiagnostico = '<b>Diagnóstico de etiquetas v2.2:</b> Saídas contabilizadas: ' + saidasContadas.length +
-      ' · Cards distintos: ' + idsSaidas.length +
-      ' · Com etiquetas no quadro de origem: ' + saidasComEtiquetaLocal +
-      ' · Com etiquetas recuperadas do destino: ' + saidasComEtiquetaExterna +
-      ' · Sem etiquetas em ambas as fontes: ' + saidasSemEtiqueta +
-      '. <b>API:</b> ' + detalheDiagnostico + '.';
     mostrarAvisos([
-      { html: avisoDiagnostico, tipo: 'info' },
       avisoCol ? { html: esc(avisoCol), tipo: 'erro' } : (S.avisoCarga ? { html: esc(S.avisoCarga) } : null),
       diagEtiquetas && diagEtiquetas.falhas ? { html: 'Não foi possível consultar as etiquetas atuais de ' + diagEtiquetas.falhas + ' card(s) transferido(s). ' + (diagEtiquetas.semPermissao ? 'Alguns retornaram erro de autorização (401/403); confira acesso aos quadros de destino. ' : 'Podem ter sido excluídos ou estar inacessíveis. ') + 'As quantidades de projetos e por etiqueta podem estar incompletas.', tipo: 'atencao' } : null,
       S.cfg.listaDesist ? null : { html: 'Escolha em <b>Filtros</b> a coluna de desistentes para contar os cancelamentos. <button class="btn" id="btnAbrirFiltros">Abrir filtros</button>' },
