@@ -208,6 +208,7 @@
 
     var clientes = R.montarClientes(contados, c.cardLabels);
     var avisoCol = '';
+    var diagEtiquetas = c.etiquetasExternas && c.etiquetasExternas._diagnostico;
     if (clientes.length) {
       try {
         var ok = await garantirHistorico(clientes, id);
@@ -229,7 +230,7 @@
 
     S.res = {
       iv: iv, kpis: kpis, projetos: P.resumir(contados, c.cardLabels, S.labels, c.cardInfo, R, c.etiquetasExternas), serieRotulo: iv.span > 31 ? 'Semana de' : 'Dia', serie: R.serie(contados, iv.span),
-      etiquetas: R.porEtiqueta(contados, clientes, c.cardLabels, S.labels),
+      etiquetas: R.porEtiqueta(contados, clientes, c.cardLabels, S.labels, c.etiquetasExternas),
       destinos: R.destinos(contados), etapas: R.etapasDesistencia(contados),
       colunas: colunas, clientes: clientes, gargalos: R.gargalos(clientes, colunas),
       linhas: linhas, ignorados: ignorados, pendentes: pendentes, decididos: decididos,
@@ -237,6 +238,7 @@
     };
     mostrarAvisos([
       avisoCol ? { html: esc(avisoCol), tipo: 'erro' } : (S.avisoCarga ? { html: esc(S.avisoCarga) } : null),
+      diagEtiquetas && diagEtiquetas.falhas ? { html: 'Não foi possível consultar as etiquetas atuais de ' + diagEtiquetas.falhas + ' card(s) transferido(s). ' + (diagEtiquetas.semPermissao ? 'Alguns retornaram erro de autorização (401/403); confira acesso aos quadros de destino. ' : 'Podem ter sido excluídos ou estar inacessíveis. ') + 'As quantidades de projetos e por etiqueta podem estar incompletas.', tipo: 'atencao' } : null,
       S.cfg.listaDesist ? null : { html: 'Escolha em <b>Filtros</b> a coluna de desistentes para contar os cancelamentos. <button class="btn" id="btnAbrirFiltros">Abrir filtros</button>' },
       pendentes.length ? { html: '<span><b>' + pendentes.length + ' pendente' + (pendentes.length === 1 ? '' : 's') + ' de confirmação.</b> Já estão contados provisoriamente. <button class="btn" id="btnVerPendentes">Revisar</button></span>', tipo: 'info' } : null
     ]);
