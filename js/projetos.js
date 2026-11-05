@@ -16,7 +16,7 @@
       // Combo prevalece: um atendimento, dois projetos (logo + site).
       if (possui(s, /\bCOMBO\b|\bLOGO\s+(?:E|COM)\s+(?:SITE|ECOMMERCE)\b|\bLOGO\s+SITE\b|\bSITE\s+LOGO\b/)) combo = true;
       // Produtos de identidade visual (grafia em portugues e espanhol).
-      if (possui(s, /\bLOGO(?:TIPO|MARCA)?\b|\bPACOTE\s+(?:BASICO|ESENCIAL|ESSENCIAL|AVANZADO|AVANCADO)\b|\bVETORIZACAO\b/)) logo = true;
+      if (possui(s, /\bLOGO(?:TIPO|MARCA)?\b|\bPACOTE\s+(?:BASICO|ESENCIAL|ESSENCIAL|AVANZADO|AVANCADO)\b|\bVETORIZACAO\b/) && !possui(s, /\bPACOTE\s+(?:AVANZADO|AVANCADO)\s+COM\s+ECOMMERCE\b/)) logo = true;
       // Produtos de sites e ecommerce, com e sem o prefixo SITE.
       if (possui(s, /\bSITE\b|\bWEBSITE\b|\bSHOPIFY\b|\bWOOCOMMERCE\b|\bECOM\b|\bE\s*COMMERCE\b|\bSTARTER\b|\bDELUXE\b|\bPROFESIONAL\b|\bPROFISSIONAL\b|\bPROFESSIONAL\b/)) site = true;
       // ADVANCED isolado e incerto; ECOM ADVANCED ja e site.
