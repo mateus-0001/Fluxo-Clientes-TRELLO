@@ -56,17 +56,18 @@
     return { labels: labels, info: info };
   };
 
-  // Cards ja transferidos podem nao aparecer em /boards/{board}/cards/all.
-  // Consulta diretamente as etiquetas dos cards acessiveis nos quadros de destino.
-  // Falhas de permissao/404 nao impedem a contagem de atendimentos.
+  // Busca as etiquetas atuais dos cards enviados a outros quadros.
+  // O ID do card permanece o mesmo na transferencia; etiquetas podem mudar.
+  // Faz consulta tambem quando a lista local esta vazia, e mostra diagnostico.
   T.fetchEtiquetasDeCardsTransferidos = async function (actions, cardLabels, token) {
-    var ids = {}, result = {};
+    var ids = {}, result = {}, falhas = [], ok = 0;
     (actions || []).forEach(function (a) {
-      var id = a && a.data && a.data.card && a.data.card.id;
-      if (id && !Object.prototype.hasOwnProperty.call(cardLabels || {}, id)) ids[id] = true;
+      if (a.type !== 'moveCardFromBoard') return;
+      var id = a.data && a.data.card && a.data.card.id;
+      if (!id) return;
+      if (!cardLabels || !cardLabels[id] || !cardLabels[id].length) ids[id] = true;
     });
-    var pendentes = Object.keys(ids);
-    var indice = 0;
+    var pendentes = Object.keys(ids), indice = 0;
     async function worker() {
       while (indice < pendentes.length) {
         var id = pendentes[indice++];
@@ -75,10 +76,16 @@
             '?fields=id,name&labels=all&label_fields=name' + cred(token),
             'ao buscar etiquetas de card transferido');
           result[id] = (c.labels || []).map(function (l) { return l.name || ''; }).filter(Boolean);
-        } catch (e) { /* card inacessivel, excluido ou sem permissao */ }
+          ok++;
+        } catch (e) {
+          falhas.push({ id: id, status: e.status || 0 });
+        }
       }
     }
     await Promise.all([worker(), worker(), worker(), worker()]);
+    result._diagnostico = { consultados: pendentes.length, acessiveis: ok,
+      semEtiquetas: Object.keys(result).filter(function (id) { return id !== '_diagnostico' && result[id].length === 0; }).length,
+      falhas: falhas.length, semPermissao: falhas.filter(function (f) { return f.status === 401 || f.status === 403; }).length };
     return result;
   };
 
