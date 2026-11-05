@@ -1,6 +1,7 @@
 /* Classificacao de projetos pelas etiquetas comerciais do SETOR DE TRIAGEM.
-   Contagem de atendimentos permanece separada. Etiquetas financeiras e de fluxo
-   nao definem o tipo de projeto. Dados de etiquetas atuais nao sao historicos. */
+   Um card = um atendimento; projetos podem ser 1 ou 2.
+   Etiquetas operacionais, financeiras e de andamento nao classificam produtos.
+   As etiquetas atuais nao provam a classificacao historica do atendimento. */
 (function (root) {
   'use strict';
   var P = {};
@@ -8,25 +9,58 @@
     return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .toUpperCase().replace(/[^A-Z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
   }
-  function possui(s, exp) { return exp.test(' ' + s + ' '); }
+  function tem(s, rx) { return rx.test(s); }
+  function etiquetaProduto(raw) {
+    var s = norm(raw);
+    if (!s) return null;
+
+    // Etiquetas de fluxo, comunicacao, pagamento, equipe e produtos adicionais
+    // nunca definem sozinhas o servico principal.
+    if (tem(s, /^(?:FALTAM?|PAGOU|NAO |JA |FORMS? |FORMULARIO |CONTRATO |ENCAMINHADO|AGUARDANDO|RESGATE|TENTATIVA|LOHANNA|PRIORIDADE|CONCLUIDO|COMPRAR|DESISTENTE|ADICIONAL|OPORTUNIDADE|BRINDE|FALTA |VOLTAR|EMAIL|CORREO|INFORMACAO|COLABORADOR|COMENTARIO|VALOR|DESCONTO|WHATS|LIGAR|STANDBY|IR PARA|CLIENTE SEM|CARTAO|FICHA|2 PACK\b)/)) return null;
+    if (tem(s, /\b(?:ENVIADO|PREENCHIDO|RESPONDEU|COBRAR|FEITO|REALIZADA|POR NOS)\b/) &&
+        !tem(s, /^COMBO\b/)) return null;
+
+    // Regra explicita do setor: QUALQUER etiqueta com a palavra COMBO e logo + site.
+    if (tem(s, /\bCOMBO\b|\bLOGO\s*(?:E|COM|MAIS)\s*(?:SITE|ECOMMERCE|E COMMERCE)\b|\bLOGO\s+SITE\b/)) return 'combo';
+
+    // HOT POCKET e uma modalidade de logo. PACOTE BASICO / ESENCIAL / AVANZADO
+    // e outras variantes comerciais do logo tambem representam um logo.
+    if (tem(s, /\bHOT POCKET\b|\bVETORIZACAO\b|\bMELHORIA DE LOGO\b/)) return 'logo';
+    if (tem(s, /^PACOTE\s+(?:BASICO|ESENCIAL|ESSENCIAL|AVANZADO|AVANCADO)(?:\b|$)/)) {
+      // Mistura de duas familias no mesmo nome: nao presumir combo automaticamente.
+      if (tem(s, /\b(?:ECOM|ECOMMERCE|SITE|SHOPIFY|WOOCOMMERCE)\b/)) return 'incerto';
+      return 'logo';
+    }
+    if (tem(s, /\b(?:LOGO|LOGOTIPO|LOGOMARCA)\b/)) return 'logo';
+
+    // Etiquetas de site. Inclui explicitamente os pacotes personalizados
+    // e reestruturacao de Shopify, que nao contem a palavra SITE.
+    if (tem(s, /\b(?:PERSONALIZADO|PERSONALIZADA|PERSONALIZADOS|PERSONALIZADAS)\b/)) return 'site';
+    if (tem(s, /\b(?:REESTRUTURACAO|REESTRUCTURACION)\s+(?:DE\s+)?SHOPIFY\b/)) return 'site';
+    if (tem(s, /\b(?:SITE|WEBSITE|SHOPIFY|WOOCOMMERCE|ECOM|ECOMMERCE|E COMMERCE)\b/)) return 'site';
+    if (tem(s, /^(?:STARTER|DELUXE|PROFESIONAL|PROFISSIONAL|PROFESSIONAL|ADVANCED)(?:\b|$)/)) return 'site';
+
+    // Outros produtos/etiquetas nao devem virar projetos por suposicao.
+    return null;
+  }
+
   P.classificar = function (nomes, doisProjetos) {
-    var nomesNormalizados = (nomes || []).map(norm).filter(Boolean);
-    var combo = false, logo = false, site = false;
-    nomesNormalizados.forEach(function (s) {
-      // Combo prevalece: um atendimento, dois projetos (logo + site).
-      if (possui(s, /\bCOMBO\b|\bLOGO\s+(?:E|COM)\s+(?:SITE|ECOMMERCE)\b|\bLOGO\s+SITE\b|\bSITE\s+LOGO\b/)) combo = true;
-      // Produtos de identidade visual (grafia em portugues e espanhol).
-      if (possui(s, /\bLOGO(?:TIPO|MARCA)?\b|\bPACOTE\s+(?:BASICO|ESENCIAL|ESSENCIAL|AVANZADO|AVANCADO)\b|\bVETORIZACAO\b/) && !possui(s, /\bPACOTE\s+(?:AVANZADO|AVANCADO)\s+COM\s+ECOMMERCE\b/)) logo = true;
-      // Produtos de sites e ecommerce, com e sem o prefixo SITE.
-      if (possui(s, /\bSITE\b|\bWEBSITE\b|\bSHOPIFY\b|\bWOOCOMMERCE\b|\bECOM\b|\bE\s*COMMERCE\b|\bSTARTER\b|\bDELUXE\b|\bPROFESIONAL\b|\bPROFISSIONAL\b|\bPROFESSIONAL\b/)) site = true;
-      // ADVANCED isolado e incerto; ECOM ADVANCED ja e site.
+    var combo = false, logo = false, site = false, incerto = false;
+    (nomes || []).forEach(function (nome) {
+      var produto = etiquetaProduto(nome);
+      if (produto === 'combo') combo = true;
+      else if (produto === 'logo') logo = true;
+      else if (produto === 'site') site = true;
+      else if (produto === 'incerto') incerto = true;
     });
-    if (combo || (logo && site)) return { tipo:'combo', total:2, logo:1, site:1, confiavel:true };
+    if (combo || (logo && site && !incerto)) return { tipo:'combo', total:2, logo:1, site:1, confiavel:true };
+    if (incerto) return { tipo:'nao-identificado', total:0, logo:0, site:0, confiavel:false };
     if (doisProjetos) return { tipo:'dois-nao-identificados', total:2, logo:0, site:0, confiavel:false };
     if (logo) return { tipo:'logo', total:1, logo:1, site:0, confiavel:true };
     if (site) return { tipo:'site', total:1, logo:0, site:1, confiavel:true };
     return { tipo:'nao-identificado', total:0, logo:0, site:0, confiavel:false };
   };
+
   P.resumir = function (eventos, cardLabels, labels, cardInfo, R, nomesExternos) {
     var nomes = {}, detalhe = [], numeros = {}, semNumero = 0;
     (labels || []).forEach(function (l) { nomes[l.id] = l.name || ''; });
