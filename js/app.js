@@ -98,10 +98,13 @@
         try { var cs = await T.fetchCards(S.boardId, S.token); cardLabels = cs.labels; cardInfo = cs.info; }
         catch (e) { S.avisoCarga = 'Não consegui ler as etiquetas e descrições dos cards (' + e.message + '). Os números gerais estão corretos, mas a leitura de 2 projetos e as etiquetas podem faltar.'; }
         if (id !== S.reqId) return;
+        // Para cards que ja sairam do quadro, tenta recuperar etiquetas do destino.
+        var etiquetasExternas = await T.fetchEtiquetasDeCardsTransferidos(actions, cardLabels, S.token);
+        if (id !== S.reqId) return;
         var nomes = {};
         await T.resolverBoards(actions, S.token, nomes);
         if (id !== S.reqId) return;
-        S.cache = { key: iv.key, quando: Date.now(), iv: iv, actions: actions, cardLabels: cardLabels, cardInfo: cardInfo, nomes: nomes, hist: null };
+        S.cache = { key: iv.key, quando: Date.now(), iv: iv, actions: actions, cardLabels: cardLabels, cardInfo: cardInfo, etiquetasExternas: etiquetasExternas, nomes: nomes, hist: null };
       }
       await calcular(id);
     } catch (e) {
@@ -225,7 +228,7 @@
     }).sort(function (a, b) { return b.date - a.date; });
 
     S.res = {
-      iv: iv, kpis: kpis, projetos: P.resumir(contados, c.cardLabels, S.labels, c.cardInfo, R), serieRotulo: iv.span > 31 ? 'Semana de' : 'Dia', serie: R.serie(contados, iv.span),
+      iv: iv, kpis: kpis, projetos: P.resumir(contados, c.cardLabels, S.labels, c.cardInfo, R, c.etiquetasExternas), serieRotulo: iv.span > 31 ? 'Semana de' : 'Dia', serie: R.serie(contados, iv.span),
       etiquetas: R.porEtiqueta(contados, clientes, c.cardLabels, S.labels),
       destinos: R.destinos(contados), etapas: R.etapasDesistencia(contados),
       colunas: colunas, clientes: clientes, gargalos: R.gargalos(clientes, colunas),
