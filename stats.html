@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Entradas x Saídas de clientes</title>
   <link rel="stylesheet" href="./css/estilo.css">
+  <style>#det-projetos #painelProjetos > h2 { display: none; }</style>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./config.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
@@ -85,7 +86,10 @@
       <!-- RESUMO -->
       <section id="aba-resumo" role="tabpanel">
         <div class="kpis" id="kpis"></div>
-        <div id="painelProjetos" class="secao painel-projetos" aria-live="polite"></div>
+        <details class="secao det painel-projetos" id="det-projetos">
+          <summary><span class="t">Clientes, atendimentos e projetos</span><span class="res">Clique para abrir os detalhes</span></summary>
+          <div class="corpo" id="painelProjetos" aria-live="polite"></div>
+        </details>
         <p class="nota" id="notaComparacao"></p>
 
         <details class="secao det" id="det-serie">
