@@ -391,7 +391,7 @@
   };
 
   // Entradas, saídas, cancelamentos e tempo médio por etiqueta (etiquetas que o card tem hoje)
-  R.porEtiqueta = function (counted, clientes, cardLabels, labels) {
+  R.porEtiqueta = function (counted, clientes, cardLabels, labels, etiquetasExternas) {
     var info = {};
     (labels || []).forEach(function (l) { info[l.id] = l; });
     var linhas = {};
@@ -403,10 +403,37 @@
       }
       return linhas[id];
     }
+    function normalizarNome(nome) {
+      return String(nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
+    }
+    var idsPorNome = {};
+    (labels || []).forEach(function (l) {
+      var chave = normalizarNome(l.name);
+      if (chave && !idsPorNome[chave]) idsPorNome[chave] = l.id;
+    });
     function idsDe(cardId) {
-      var ls = (cardLabels && cardLabels[cardId]) || [];
+      var ls = ((cardLabels && cardLabels[cardId]) || []).slice();
+      var externos = (etiquetasExternas && etiquetasExternas[cardId]) || [];
+      // Nomes de etiquetas externas sao reconciliados com as do quadro de origem.
+      // Nomes desconhecidos ganham um ID sintetico para poderem ser exibidos.
+      externos.forEach(function (nome) {
+        var chave = normalizarNome(nome);
+        if (!chave) return;
+        var id = idsPorNome[chave] || ('externa:' + chave);
+        if (!info[id]) info[id] = { id: id, name: nome, color: null };
+        if (ls.indexOf(id) < 0) ls.push(id);
+      });
+      // Evita somar a mesma etiqueta comercial duas vezes quando IDs diferem.
+      var visto = {};
+      ls = ls.filter(function (id) {
+        var chave = normalizarNome(info[id] && info[id].name) || id;
+        if (visto[chave]) return false;
+        visto[chave] = true;
+        return true;
+      });
       return ls.length ? ls : ['__none__'];
     }
+
     counted.forEach(function (ev) {
       if (ev.ign || ev.tipo === 'rem') return;
       idsDe(ev.id).forEach(function (lid) { linha(lid)[ev.tipo]++; });
