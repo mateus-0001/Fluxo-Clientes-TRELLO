@@ -177,6 +177,31 @@
     ws.getRow(nota).height = 28;
     paginaCfg(ws);
 
+    // ===== Projetos (contagem conservadora) =====
+    if (d.projetos) {
+      var p = d.projetos;
+      var linhasPr = [
+        ['Atendimentos', p.atendimentos.in, p.atendimentos.out, p.atendimentos.cancel],
+        ['Projetos identificados', p.projetosConfirmados.in, p.projetosConfirmados.out, p.projetosConfirmados.cancel],
+        ['Logos identificados', p.logo.in, p.logo.out, p.logo.cancel],
+        ['Sites identificados', p.site.in, p.site.out, p.site.cancel],
+        ['Cards sem classificação', p.semClassificacao.in, p.semClassificacao.out, p.semClassificacao.cancel],
+        ['Dois projetos com tipos indefinidos', p.doisSemTipo.in, p.doisSemTipo.out, p.doisSemTipo.cancel]
+      ];
+      abaDados(wb, 'Projetos', COR.verde, 'Clientes, atendimentos e projetos',
+        sub + ' | Clientes únicos identificados nas entradas: ' + p.clientesUnicos +
+        ' | Entradas sem número: ' + p.semIdentificador +
+        ' | Projetos são parciais quando falta etiqueta explícita.',
+        ['Indicador', 'Entradas', 'Saídas', 'Cancelamentos'], linhasPr,
+        { fmts: [null, '0', '0', '0'], aligns: ['left','right','right','right'], min: 18 });
+      abaDados(wb, 'Classificação projetos', COR.laranja, 'Auditoria de identificação dos projetos',
+        'A classificação usa etiquetas atuais. Cards de outros quadros podem ficar sem etiqueta na triagem.',
+        ['Card', 'Evento', 'Data', 'Tipo identificado', 'Projetos identificados', 'Logo', 'Site', 'Precisa classificar'],
+        p.detalhe.map(function (x) { return [x.card, TIPO[x.tipoEvento], loc(x.data), x.classe,
+          x.projetosConfirmados, x.logo, x.site, x.precisaClassificar ? 'SIM' : 'NÃO']; }),
+        { fmts:[null,null,FMT_DATAHORA,'0','0','0','0',null], max:60 });
+    }
+
     // ===== Por etiqueta =====
     var linhasEt = d.etiquetas.map(function (e) {
       return [e.nome, e.in, e.out, e.cancel, e.taxa, e.saldo, e.nClientes, e.tempoMedio == null ? '' : R.fmtTempo(e.tempoMedio), e.tempoMedio == null ? '' : R.horas(e.tempoMedio)];
@@ -302,6 +327,15 @@
       [d.serieRotulo, 'Entradas', 'Saídas', 'Cancelamentos', 'Saldo']]
       .concat(d.serie.map(function (s) { return [s.rotulo, s.in, s.out, s.cancel, s.saldo]; }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(res), 'Resumo');
+    if (d.projetos) {
+      var p=d.projetos;
+      var pr=[['Indicador','Entradas','Saídas','Cancelamentos'],['Atendimentos',p.atendimentos.in,p.atendimentos.out,p.atendimentos.cancel],
+        ['Projetos identificados',p.projetosConfirmados.in,p.projetosConfirmados.out,p.projetosConfirmados.cancel],
+        ['Logos',p.logo.in,p.logo.out,p.logo.cancel],['Sites',p.site.in,p.site.out,p.site.cancel],
+        ['Sem classificação',p.semClassificacao.in,p.semClassificacao.out,p.semClassificacao.cancel],
+        ['Clientes únicos identificados',p.clientesUnicos]];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(pr), 'Projetos');
+    }
 
     var cab = ['Nº do cliente', 'Nome', 'Card', 'Situação', 'Entrada', 'Saída', 'Tempo no board', 'Horas', 'Destino / etapa'];
     d.colunas.forEach(function (c) { cab.push('Tempo em: ' + c.nome); });
