@@ -509,6 +509,7 @@
       '<div><span>Logos recebidos / encaminhados</span>' + numero(p.logo.in + ' / ' + p.logo.out) + '</div>' +
       '<div><span>Sites tradicionais recebidos / encaminhados</span>' + numero(p.site.in + ' / ' + p.site.out) + '</div>' +
       '<div><span>E-commerce recebidos / encaminhados</span>' + numero(p.ecommerce.in + ' / ' + p.ecommerce.out) + '</div>' +
+      '<div><span>Combos (com etiqueta) recebidos / encaminhados</span>' + numero((p.combosEtiqueta || {in:0,out:0}).in + ' / ' + (p.combosEtiqueta || {in:0,out:0}).out) + '</div>' +
       ((p.outros.in || p.outros.out || p.outros.cancel) ? '<div><span>Outros recebidos / encaminhados</span>' + numero(p.outros.in + ' / ' + p.outros.out) + '</div>' : '') +
       '</div>' +
       ((p.semClassificacao.in + p.semClassificacao.out + p.semClassificacao.cancel) ?
