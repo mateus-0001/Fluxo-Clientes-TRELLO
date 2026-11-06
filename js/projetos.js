@@ -42,8 +42,9 @@
     // e reestruturacao de Shopify, que nao contem a palavra SITE.
     if (tem(s, /^ELDER$/)) return 'site';
     if (tem(s, /\b(?:PERSONALIZADO|PERSONALIZADA|PERSONALIZADOS|PERSONALIZADAS)\b/)) return 'site';
-    if (tem(s, /\b(?:REESTRUTURACAO|REESTRUCTURACION)\s+(?:DE\s+)?SHOPIFY\b/)) return 'site';
-    if (tem(s, /\b(?:SITE|WEBSITE|SHOPIFY|WOOCOMMERCE|ECOM|ECOMMERCE|E COMMERCE)\b/)) return 'site';
+    if (tem(s, /\b(?:REESTRUTURACAO|REESTRUCTURACION)\s+(?:DE\s+)?SHOPIFY\b/)) return 'ecommerce';
+    if (tem(s, /\b(?:SHOPIFY|WOOCOMMERCE|ECOM|ECOMMERCE|E COMMERCE)\b/)) return 'ecommerce';
+    if (tem(s, /\b(?:SITE|WEBSITE)\b/)) return 'site';
     if (tem(s, /^(?:STARTER|DELUXE|PROFESIONAL|PROFISSIONAL|PROFESSIONAL|ADVANCED)(?:\b|$)/)) return 'site';
 
     // Outros produtos/etiquetas nao devem virar projetos por suposicao.
@@ -53,7 +54,7 @@
   // Uma etiqueta de COMBO significa exatamente 2 projetos (1 logo + 1 site).
   // As etiquetas classificam o atendimento atual, mas nao provam o tipo historico.
   P.classificar = function (nomes, doisProjetos) {
-    var grupos = { combo: [], logo: [], site: [], outro: [], adicional: [], incerto: [] };
+    var grupos = { combo: [], logo: [], site: [], ecommerce: [], outro: [], adicional: [], incerto: [] };
     var vistos = {};
     (nomes || []).forEach(function (original) {
       var nome = String(original || '').trim();
@@ -66,32 +67,36 @@
     function adicionar(tipo, tag) { componentes.push({ categoria: tipo, etiqueta: tag }); }
     var combos = grupos.combo;
     if (combos.length) {
-      adicionar('Logo', combos[0]); adicionar('Site', combos[0]);
+      adicionar('Logo', combos[0]);
+      adicionar(/\b(?:ECOM|ECOMMERCE|SHOPIFY|WOOCOMMERCE)\b/.test(norm(combos[0])) ? 'E-commerce' : 'Site', combos[0]);
     } else if (grupos.incerto.length) {
-      return { tipo: 'nao-identificado', total: 0, logo: 0, site: 0, outros: 0,
+      return { tipo: 'nao-identificado', total: 0, logo: 0, site: 0, ecommerce: 0, outros: 0,
         confiavel: false, componentes: [], etiquetas: nomes || [] };
     } else {
       if (grupos.logo.length) adicionar('Logo', grupos.logo[0]);
-      if (grupos.site.length) adicionar('Site', grupos.site[0]);
+      // Uma etiqueta e-commerce tem prioridade sobre uma etiqueta generica de site.
+      if (grupos.ecommerce.length) adicionar('E-commerce', grupos.ecommerce[0]);
+      else if (grupos.site.length) adicionar('Site', grupos.site[0]);
       // Etiquetas de adicionais explicitamente identificados como produto
       // podem representar outro projeto no mesmo atendimento.
       if (grupos.outro.length) adicionar('Outro', grupos.outro[0]);
     }
     if (!componentes.length && grupos.adicional.length) {
-      return { tipo: 'adicional-desconsiderado', total: 0, logo: 0, site: 0, outros: 0,
+      return { tipo: 'adicional-desconsiderado', total: 0, logo: 0, site: 0, ecommerce: 0, outros: 0,
         confiavel: true, componentes: [], etiquetas: nomes || [] };
     }
     if (!componentes.length) {
       return { tipo: doisProjetos ? 'dois-nao-identificados' : 'nao-identificado',
-        total: 0, logo: 0, site: 0, outros: 0, confiavel: false,
+        total: 0, logo: 0, site: 0, ecommerce: 0, outros: 0, confiavel: false,
         componentes: [], etiquetas: nomes || [] };
     }
     var nLogo = componentes.filter(function (c) { return c.categoria === 'Logo'; }).length;
     var nSite = componentes.filter(function (c) { return c.categoria === 'Site'; }).length;
+    var nEcommerce = componentes.filter(function (c) { return c.categoria === 'E-commerce'; }).length;
     var nOutro = componentes.filter(function (c) { return c.categoria === 'Outro'; }).length;
-    return { tipo: nLogo && nSite ? 'combo' : nLogo && nOutro ? 'logo+outro' :
-      nSite && nOutro ? 'site+outro' : nLogo ? 'logo' : nSite ? 'site' : 'outro',
-      total: componentes.length, logo: nLogo, site: nSite, outros: nOutro,
+    return { tipo: nLogo && (nSite || nEcommerce) ? 'combo' : nLogo && nOutro ? 'logo+outro' :
+      (nSite || nEcommerce) && nOutro ? 'site+outro' : nLogo ? 'logo' : nEcommerce ? 'ecommerce' : nSite ? 'site' : 'outro',
+      total: componentes.length, logo: nLogo, site: nSite, ecommerce: nEcommerce, outros: nOutro,
       confiavel: true, componentes: componentes, etiquetas: nomes || [] };
   };
 
@@ -99,7 +104,7 @@
     var nomes = {}, detalhe = [], numeros = {}, semNumero = 0;
     (labels || []).forEach(function (l) { nomes[l.id] = l.name || ''; });
     var total = {in:0,out:0,cancel:0}, logo = {in:0,out:0,cancel:0},
-      site = {in:0,out:0,cancel:0}, outros = {in:0,out:0,cancel:0};
+      site = {in:0,out:0,cancel:0}, ecommerce = {in:0,out:0,cancel:0}, outros = {in:0,out:0,cancel:0};
     var naoIdentificados = {in:0,out:0,cancel:0}, doisSemTipo = {in:0,out:0,cancel:0};
     var agrupados = {}, eventosPorTag = {};
     (eventos || []).forEach(function (ev) {
@@ -118,6 +123,7 @@
         total[ev.tipo] += cl.total;
         logo[ev.tipo] += cl.logo;
         site[ev.tipo] += cl.site;
+        ecommerce[ev.tipo] += cl.ecommerce;
         outros[ev.tipo] += cl.outros;
         // Cada projeto entra UMA vez no resumo por etiqueta. Em combos,
         // a mesma etiqueta gera duas linhas: Logo e Site.
@@ -133,7 +139,7 @@
       }
       detalhe.push({card:(ev.card && ev.card.name)||'',tipoEvento:ev.tipo,data:ev.when,
         classe:cl.tipo,projetosConfirmados:cl.confiavel?cl.total:0,
-        logo:cl.logo,site:cl.site,outros:cl.outros,etiquetas:ls,
+        logo:cl.logo,site:cl.site,ecommerce:cl.ecommerce,outros:cl.outros,etiquetas:ls,
         componentes:cl.componentes,precisaClassificar:!cl.confiavel,cardId:ev.id});
     });
     var porEtiqueta = Object.keys(agrupados).map(function (k) {return agrupados[k];});
@@ -141,7 +147,7 @@
       return b.out-a.out || b.in-a.in || a.categoria.localeCompare(b.categoria) || a.etiqueta.localeCompare(b.etiqueta);
     });
     return {atendimentos:R.contar(eventos),clientesUnicos:Object.keys(numeros).length,
-      semIdentificador:semNumero,projetosConfirmados:total,logo:logo,site:site,outros:outros,
+      semIdentificador:semNumero,projetosConfirmados:total,logo:logo,site:site,ecommerce:ecommerce,outros:outros,
       semClassificacao:naoIdentificados,doisSemTipo:doisSemTipo,
       detalhe:detalhe,porEtiqueta:porEtiqueta,
       nota:'Projetos classificados pelas etiquetas comerciais atualmente acessiveis. Etiquetas atuais nao provam a classificacao historica.'};
