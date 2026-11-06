@@ -177,52 +177,82 @@
     ws.getRow(nota).height = 28;
     paginaCfg(ws);
 
-    // ===== Projetos (contagem conservadora) =====
+    // ===== Projetos: painel visual espelhando os indicadores do Power-Up =====
     if (d.projetos) {
-      var p = d.projetos;
-      var linhasPr = [
-        ['Atendimentos', p.atendimentos.in, p.atendimentos.out, p.atendimentos.cancel],
-        ['Projetos identificados', p.projetosConfirmados.in, p.projetosConfirmados.out, p.projetosConfirmados.cancel],
-        ['Logos identificados', p.logo.in, p.logo.out, p.logo.cancel],
-        ['Sites identificados', p.site.in, p.site.out, p.site.cancel],
-        ['Outros projetos identificados', p.outros.in, p.outros.out, p.outros.cancel],
-        ['Cards sem classificação', p.semClassificacao.in, p.semClassificacao.out, p.semClassificacao.cancel],
-        ['Dois projetos com tipos indefinidos', p.doisSemTipo.in, p.doisSemTipo.out, p.doisSemTipo.cancel]
+      var pr = d.projetos;
+      var wsProjetos = wb.addWorksheet('Projetos', { properties: { tabColor: {argb: COR.verde} }, views: [{showGridLines:false}] });
+      titulo(wsProjetos, 'Clientes, atendimentos e projetos', sub, 8);
+      for (var ci = 1; ci <= 8; ci++) wsProjetos.getColumn(ci).width = 19;
+      function caixaProjeto(indice, rotulo, valor, cor) {
+        var coluna = (indice % 4) * 2 + 1, linha = indice < 4 ? 4 : 8;
+        wsProjetos.mergeCells(linha, coluna, linha, coluna + 1);
+        wsProjetos.mergeCells(linha + 1, coluna, linha + 2, coluna + 1);
+        var cab = wsProjetos.getCell(linha, coluna), val = wsProjetos.getCell(linha + 1, coluna);
+        cab.value = rotulo;
+        cab.font = {name:'Calibri', size:10, bold:true, color:{argb:COR.cinza}};
+        cab.alignment = {vertical:'middle', horizontal:'center',wrapText:true};
+        val.value = valor;
+        val.font = {name:'Calibri', size:21, bold:true, color:{argb:cor || COR.navy}};
+        val.alignment = {vertical:'middle', horizontal:'center'};
+        for (var rr=linha; rr<=linha+2; rr++) for (var cc=coluna; cc<=coluna+1; cc++) preencher(wsProjetos.getCell(rr,cc),COR.cinzaL);
+        // reaplicar estilos nas celulas superiores mescladas
+        cab.font={name:'Calibri',size:10,bold:true,color:{argb:COR.cinza}};
+        val.font={name:'Calibri',size:21,bold:true,color:{argb:cor || COR.navy}};
+        wsProjetos.getRow(linha).height=28;
+        wsProjetos.getRow(linha+1).height=26;
+        wsProjetos.getRow(linha+2).height=20;
+      }
+      var indicadores = [
+        ['Clientes únicos identificados', pr.clientesUnicos],
+        ['Atendimentos recebidos', pr.atendimentos.in],
+        ['Projetos recebidos identificados', pr.projetosConfirmados.in],
+        ['Projetos encaminhados identificados', pr.projetosConfirmados.out],
+        ['Logos recebidos / encaminhados', pr.logo.in + ' / ' + pr.logo.out],
+        ['Sites tradicionais recebidos / encaminhados', pr.site.in + ' / ' + pr.site.out],
+        ['E-commerce recebidos / encaminhados', pr.ecommerce.in + ' / ' + pr.ecommerce.out],
+        ['Outros recebidos / encaminhados', pr.outros.in + ' / ' + pr.outros.out]
       ];
-      var wsProjetos = abaDados(wb, 'Projetos', COR.verde, 'Clientes, atendimentos e projetos',
-        sub + ' | Clientes únicos identificados nas entradas: ' + p.clientesUnicos +
-        ' | Entradas sem número: ' + p.semIdentificador +
-        ' | Projetos são parciais quando falta etiqueta explícita.',
-        ['Indicador', 'Entradas', 'Saídas', 'Cancelamentos'], linhasPr,
-        { fmts: [null, '0', '0', '0'], aligns: ['left','right','right','right'], min: 18 });
-      // Resumo por categoria diretamente na aba Projetos.
-      var linhaResumo = 4 + linhasPr.length + 3;
-      wsProjetos.getCell(linhaResumo, 1).value = 'Resumo de projetos por tipo';
-      wsProjetos.getCell(linhaResumo, 1).font = { name: 'Calibri', bold:true, size:12, color:{argb: COR.navy} };
-      cabecalho(wsProjetos, linhaResumo + 1, ['Categoria', 'Recebidos', 'Encaminhados', 'Cancelados']);
+      indicadores.forEach(function (it,i){caixaProjeto(i,it[0],it[1],i===2?COR.verde:i===3?COR.azul:COR.navy);});
+      var pendencia = pr.semClassificacao.in + pr.semClassificacao.out + pr.semClassificacao.cancel;
+      wsProjetos.mergeCells('A12:H12');
+      var notaPr = wsProjetos.getCell('A12');
+      notaPr.value = pendencia ? ('Classificação pendente: '+pr.semClassificacao.in+' entrada(s) e '+pr.semClassificacao.out+' saída(s). Confira a aba Classificação projetos.') : 'Nenhum evento sem classificação segura. Adicionais isolados não entram nos totais.';
+      notaPr.font={name:'Calibri',size:10,italic:true,color:{argb:pendencia?COR.laranja:COR.verde}};
+      wsProjetos.getRow(12).height=25;
+      wsProjetos.mergeCells('A14:H14');
+      wsProjetos.getCell('A14').value='Resumo de projetos por tipo';
+      wsProjetos.getCell('A14').font={name:'Calibri',bold:true,size:13,color:{argb:COR.navy}};
+      cabecalho(wsProjetos,15,['Categoria','Recebidos','Encaminhados','Cancelados']);
       var tipos = [
-        ['Logo',p.logo.in,p.logo.out,p.logo.cancel],
-        ['Site / e-commerce',p.site.in,p.site.out,p.site.cancel],
-        ['Outros',p.outros.in,p.outros.out,p.outros.cancel],
-        ['TOTAL IDENTIFICADO',p.projetosConfirmados.in,p.projetosConfirmados.out,p.projetosConfirmados.cancel]
+        ['Logo',pr.logo.in,pr.logo.out,pr.logo.cancel],
+        ['Site tradicional',pr.site.in,pr.site.out,pr.site.cancel],
+        ['E-commerce',pr.ecommerce.in,pr.ecommerce.out,pr.ecommerce.cancel],
+        ['Outros',pr.outros.in,pr.outros.out,pr.outros.cancel],
+        ['TOTAL IDENTIFICADO',pr.projetosConfirmados.in,pr.projetosConfirmados.out,pr.projetosConfirmados.cancel]
       ];
-      linhasTabela(wsProjetos, linhaResumo+2, tipos, [null,'0','0','0']);
-      tipos[3].forEach(function (_x, col) {
-        var c = wsProjetos.getCell(linhaResumo+5,col+1);
-        c.font={name:'Calibri',bold:true,color:{argb:COR.navy}};
-        preencher(c,COR.azulL);
-      });
+      linhasTabela(wsProjetos,16,tipos,[null,'0','0','0']);
+      for (var tt=1;tt<=4;tt++) { var cel=wsProjetos.getCell(20,tt); preencher(cel,COR.azulL);cel.font={name:'Calibri',bold:true,color:{argb:COR.navy}}; }
+      wsProjetos.mergeCells('A23:H23');
+      wsProjetos.getCell('A23').value='Controle de classificação';
+      wsProjetos.getCell('A23').font={name:'Calibri',bold:true,size:12,color:{argb:COR.navy}};
+      cabecalho(wsProjetos,24,['Indicador','Entradas','Saídas','Cancelamentos']);
+      linhasTabela(wsProjetos,25,[
+        ['Atendimentos',pr.atendimentos.in,pr.atendimentos.out,pr.atendimentos.cancel],
+        ['Sem classificação',pr.semClassificacao.in,pr.semClassificacao.out,pr.semClassificacao.cancel],
+        ['Dois projetos com tipo indefinido',pr.doisSemTipo.in,pr.doisSemTipo.out,pr.doisSemTipo.cancel]
+      ],[null,'0','0','0']);
+      paginaCfg(wsProjetos);
       abaDados(wb, 'Projetos por etiqueta', COR.azul, 'Projetos por categoria e etiqueta',
-        sub + ' | COMBO = 1 logo + 1 site; cada projeto entra uma vez nos totais.',
+        sub + ' | Combo = 1 logo + 1 site; e-commerce separado de site tradicional.',
         ['Categoria', 'Etiqueta comercial', 'Recebidos', 'Encaminhados', 'Cancelados'],
-        (p.porEtiqueta || []).map(function(x){return [x.categoria,x.etiqueta,x.in,x.out,x.cancel];}),
+        (pr.porEtiqueta || []).map(function(x){return [x.categoria,x.etiqueta,x.in,x.out,x.cancel];}),
         {fmts:[null,null,'0','0','0'],min:16,max:52});
       abaDados(wb, 'Classificação projetos', COR.laranja, 'Auditoria de identificação dos projetos',
-        'A classificação usa etiquetas atuais. Cards de outros quadros podem ficar sem etiqueta na triagem.',
-        ['Card', 'Evento', 'Data', 'Tipo identificado', 'Projetos identificados', 'Logo', 'Site', 'Outros', 'Etiquetas encontradas', 'Precisa classificar'],
-        p.detalhe.map(function (x) { return [x.card, TIPO[x.tipoEvento], loc(x.data), x.classe,
-          x.projetosConfirmados, x.logo, x.site, x.outros, (x.etiquetas || []).join(' | '), x.precisaClassificar ? 'SIM' : 'NÃO']; }),
-        { fmts:[null,null,FMT_DATAHORA,null,'0','0','0','0',null,null], max:60 });
+        'Etiquetas atualmente acessíveis, não necessariamente iguais às da data de transferência.',
+        ['Card','Evento','Data','Tipo identificado','Projetos','Logo','Site tradicional','E-commerce','Outros','Etiquetas encontradas','Precisa classificar'],
+        pr.detalhe.map(function(x){return [x.card,TIPO[x.tipoEvento],loc(x.data),x.classe,
+          x.projetosConfirmados,x.logo,x.site,x.ecommerce,x.outros,(x.etiquetas||[]).join(' | '),x.precisaClassificar?'SIM':'NÃO'];}),
+        {fmts:[null,null,FMT_DATAHORA,null,'0','0','0','0','0',null,null],max:60});
     }
 
     // ===== Por etiqueta =====
@@ -354,14 +384,15 @@
       var p=d.projetos;
       var pr=[['Indicador','Entradas','Saídas','Cancelamentos'],['Atendimentos',p.atendimentos.in,p.atendimentos.out,p.atendimentos.cancel],
         ['Projetos identificados',p.projetosConfirmados.in,p.projetosConfirmados.out,p.projetosConfirmados.cancel],
-        ['Logos',p.logo.in,p.logo.out,p.logo.cancel],['Sites',p.site.in,p.site.out,p.site.cancel],
+        ['Logos',p.logo.in,p.logo.out,p.logo.cancel],['Sites tradicionais',p.site.in,p.site.out,p.site.cancel],
+        ['E-commerce',p.ecommerce.in,p.ecommerce.out,p.ecommerce.cancel],
         ['Outros',p.outros.in,p.outros.out,p.outros.cancel],
         ['Sem classificação',p.semClassificacao.in,p.semClassificacao.out,p.semClassificacao.cancel],
         ['Clientes únicos identificados',p.clientesUnicos]];
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(pr), 'Projetos');
       var pe=[['Categoria','Etiqueta comercial','Recebidos','Encaminhados','Cancelados']].concat((p.porEtiqueta||[]).map(function(x){return [x.categoria,x.etiqueta,x.in,x.out,x.cancel];}));
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(pe), 'Projetos por etiqueta');
-      var cp=[['Card','Evento','Data','Tipo','Projetos','Logo','Site','Outros','Etiquetas','Revisar']].concat(p.detalhe.map(function(x){return [x.card,TIPO[x.tipoEvento],R.fmtFull(x.data),x.classe,x.projetosConfirmados,x.logo,x.site,x.outros,(x.etiquetas||[]).join(' | '),x.precisaClassificar?'SIM':'NÃO'];}));
+      var cp=[['Card','Evento','Data','Tipo','Projetos','Logo','Site tradicional','E-commerce','Outros','Etiquetas','Revisar']].concat(p.detalhe.map(function(x){return [x.card,TIPO[x.tipoEvento],R.fmtFull(x.data),x.classe,x.projetosConfirmados,x.logo,x.site,x.ecommerce,x.outros,(x.etiquetas||[]).join(' | '),x.precisaClassificar?'SIM':'NÃO'];}));
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(cp), 'Classificação projetos');
     }
 
