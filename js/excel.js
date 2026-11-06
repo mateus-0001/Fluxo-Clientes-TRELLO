@@ -138,7 +138,7 @@
       { rot: 'ENTRADAS', val: k.in, cor: COR.verde, fundo: COR.verdeL, dl: deltaTxt(k.in, p && p.in, 'período anterior'), fmt: '0' },
       { rot: 'SAÍDAS (outro board)', val: k.out, cor: COR.azul, fundo: COR.azulL, dl: deltaTxt(k.out, p && p.out, 'período anterior'), fmt: '0' },
       { rot: 'CANCELAMENTOS', val: k.cancel, cor: COR.vermelho, fundo: COR.vermelhoL, dl: deltaTxt(k.cancel, p && p.cancel, 'período anterior'), fmt: '0' },
-      { rot: 'SALDO (ativos)', val: k.saldo, cor: k.saldo < 0 ? COR.vermelho : COR.navy, fundo: COR.cinzaL, dl: deltaTxt(k.saldo, p && p.saldo, 'período anterior'), fmt: '+0;-0;0' },
+      { rot: 'SALDO DO FLUXO', val: k.saldo, cor: k.saldo < 0 ? COR.vermelho : COR.navy, fundo: COR.cinzaL, dl: deltaTxt(k.saldo, p && p.saldo, 'período anterior'), fmt: '+0;-0;0' },
       { rot: 'TAXA DE CANCELAMENTO', val: k.taxa, cor: COR.laranja, fundo: 'FFFFF4E5', dl: 'cancelamentos ÷ entradas', fmt: '0.0%' }
     ];
     cards.forEach(function (c, i) {
@@ -249,10 +249,10 @@
         {fmts:[null,null,'0','0','0'],min:16,max:52});
       abaDados(wb, 'Classificação projetos', COR.laranja, 'Auditoria de identificação dos projetos',
         'Etiquetas atualmente acessíveis, não necessariamente iguais às da data de transferência.',
-        ['Card','Evento','Data','Tipo identificado','Projetos','Logo','Site tradicional','E-commerce','Outros','Etiquetas encontradas','Precisa classificar'],
+        ['Card','Evento','Data','Tipo identificado','Projetos','Logo','Site tradicional','E-commerce','Outros','Etiquetas encontradas','Precisa classificar','ID card (Trello)','ID ação (Trello)'],
         pr.detalhe.map(function(x){return [x.card,TIPO[x.tipoEvento],loc(x.data),x.classe,
-          x.projetosConfirmados,x.logo,x.site,x.ecommerce,x.outros,(x.etiquetas||[]).join(' | '),x.precisaClassificar?'SIM':'NÃO'];}),
-        {fmts:[null,null,FMT_DATAHORA,null,'0','0','0','0','0',null,null],max:60});
+          x.projetosConfirmados,x.logo,x.site,x.ecommerce,x.outros,(x.etiquetas||[]).join(' | '),x.precisaClassificar?'SIM':'NÃO',x.cardId||'',x.actionId||''];}),
+        {fmts:[null,null,FMT_DATAHORA,null,'0','0','0','0','0',null,null,null,null],max:60});
     }
 
     // ===== Por etiqueta =====
@@ -287,15 +287,15 @@
     paginaCfg(wsD);
 
     // ===== Clientes =====
-    var cab = ['Nº do cliente', 'Nome', 'Card (nome completo)', 'Situação', 'Entrada', 'Saída', 'Tempo no board', 'Horas', 'Destino / etapa'];
+    var cab = ['Nº do cliente', 'Nome', 'Card (nome completo)', 'Situação', 'Entrada', 'Saída', 'Tempo no board', 'Horas', 'Destino / etapa', 'ID card (Trello)', 'ID ação de saída', 'ID ação de entrada'];
     d.colunas.forEach(function (c) { cab.push('Tempo em: ' + c.nome); });
     var linhasC = d.clientes.map(function (c) {
       var l = [c.numero, c.nome, c.card, SITUACAO[c.situacao], loc(c.entrada), loc(c.saida), R.fmtTempo(c.ms), R.horas(c.ms),
-               c.situacao === 'out' ? c.destino : 'Desistiu em: ' + (c.etapa || '—')];
+               c.situacao === 'out' ? c.destino : 'Desistiu em: ' + (c.etapa || '—'),c.id||'',c.saidaActionId||'',c.entradaActionId||''];
       d.colunas.forEach(function (col) { var x = c.colunas && c.colunas[col.id]; l.push(x && x.ms > 0 ? R.fmtTempo(x.ms) : ''); });
       return l;
     });
-    var fmtsC = [null, null, null, null, FMT_DATAHORA, FMT_DATAHORA, null, '0.0', null];
+    var fmtsC = [null, null, null, null, FMT_DATAHORA, FMT_DATAHORA, null, '0.0', null, null, null, null];
     var wsC = abaDados(wb, 'Clientes', COR.navy, 'Tempo de cada cliente', sub, cab, linhasC,
       { fmts: fmtsC, aligns: ['left', 'left', 'left', 'left', 'right', 'right', 'right', 'right', 'left'], congelarCols: 2, max: 40 });
     linhasC.forEach(function (l, i) {
@@ -327,9 +327,9 @@
     }
 
     // ===== Cards (movimentações) =====
-    var linhasK = d.cards.map(function (c) { return [loc(c.date), TIPO[c.tipo], c.motivo, c.card, c.origem, c.destino, c.quem, c.obs || '']; });
+    var linhasK = d.cards.map(function (c) { return [loc(c.date), TIPO[c.tipo], c.motivo, c.card, c.origem, c.destino, c.quem, c.obs || '',c.cardId||'',c.actionId||'',c.dataUTC||'']; });
     var wsK = abaDados(wb, 'Cards', COR.cinza, 'Cards que entraram, saíram ou cancelaram', sub,
-      ['Data', 'Tipo', 'Motivo', 'Card', 'Lista de origem', 'Lista de destino', 'Responsável', 'Observação'], linhasK,
+      ['Data', 'Tipo', 'Motivo', 'Card', 'Lista de origem', 'Lista de destino', 'Responsável', 'Observação','ID card (Trello)','ID ação (Trello)','Data UTC original'], linhasK,
       { fmts: [FMT_DATAHORA], aligns: ['right', 'left', 'left', 'left', 'left', 'left', 'left', 'left'], max: 60 });
     d.cards.forEach(function (c, i) {
       var cel = wsK.getCell(5 + i, 2);
@@ -340,20 +340,36 @@
 
     // ===== Pendentes =====
     if (d.pendentes.length) {
-      var linhasP = d.pendentes.map(function (e) { return [loc(e.date), TIPO[e.tipo], e.card, e.motivo, e.porque, 'Sim (provisório)']; });
+      var linhasP = d.pendentes.map(function (e) { return [loc(e.date), TIPO[e.tipo], e.card, e.motivo, e.porque, 'Sim (provisório)',e.cardId||'',e.actionId||'']; });
       var wsP = abaDados(wb, 'Pendentes', COR.laranja, 'Pendentes de confirmação', 'Já estão contados provisoriamente. Confirme no painel (aba Pendentes). ' + sub,
-        ['Data', 'Evento', 'Card', 'O que foi', 'Por que precisa de confirmação', 'Está contando?'], linhasP,
+        ['Data', 'Evento', 'Card', 'O que foi', 'Por que precisa de confirmação', 'Está contando?','ID card (Trello)','ID ação (Trello)'], linhasP,
         { fmts: [FMT_DATAHORA], aligns: ['right', 'left', 'left', 'left', 'left', 'left'], max: 70 });
       linhasP.forEach(function (l, i) { var c = wsP.getCell(5 + i, 6); preencher(c, 'FFFFF4E5'); c.font = { name: 'Calibri', size: 10, bold: true, color: { argb: COR.laranja } }; });
     }
 
     // ===== Ignorados =====
     if (d.ignorados.length) {
-      var linhasI = d.ignorados.map(function (e) { return [loc(e.date), TIPO[e.tipo], e.card, e.motivo, e.porque]; });
+      var linhasI = d.ignorados.map(function (e) { return [loc(e.date), TIPO[e.tipo], e.card, e.motivo, e.porque,e.cardId||'',e.actionId||'']; });
       abaDados(wb, 'Ignorados', COR.vermelho, 'Ignorados por provável engano', 'Estes eventos não entram nas contagens. ' + sub,
-        ['Data', 'Evento', 'Card', 'O que foi', 'Por que foi ignorado'], linhasI,
+        ['Data', 'Evento', 'Card', 'O que foi', 'Por que foi ignorado','ID card (Trello)','ID ação (Trello)'], linhasI,
         { fmts: [FMT_DATAHORA], aligns: ['right', 'left', 'left', 'left', 'left'], max: 60 });
     }
+    // ===== Trilha de auditoria independente =====
+    // IDs e data UTC como TEXTO, para permitir conciliar com a API do Trello
+    // sem perder precisao nem depender de nome/telefone renomeaveis.
+    var linhasAudit = (d.auditoriaEventos || []).map(function (e) {
+      return [loc(e.data), e.dataUTC, e.card, e.cardId, e.actionId,
+        e.acaoAPI, TIPO[e.tipo] || e.tipo, e.estado, e.contado ? 'SIM' : 'NÃO',
+        e.motivo, e.origem, e.destino, e.boardOrigemId, e.boardDestinoId, e.decisao];
+    });
+    abaDados(wb, 'Auditoria eventos', COR.laranja, 'Rastreabilidade de eventos do Trello',
+      'Inclui eventos contabilizados, ignorados e suprimidos pela regra de estado. ' +
+      'IDs e datas UTC permitem comparar com a API. Movimentos entre listas que nao alteram a contagem nao aparecem nesta aba. ' + sub,
+      ['Data local','Data UTC (ISO)','Card (nome no evento)','ID card (Trello)','ID ação (Trello)',
+       'Tipo de ação API','Tipo de fluxo','Situação','Contabilizado?','Justificativa',
+       'Lista origem','Destino','ID board origem','ID board destino','Decisão manual'],
+      linhasAudit, {fmts:[FMT_DATAHORA],min:16,max:62,congelarCols:3});
+
     return wb;
   };
 
@@ -392,22 +408,22 @@
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(pr), 'Projetos');
       var pe=[['Categoria','Etiqueta comercial','Recebidos','Encaminhados','Cancelados']].concat((p.porEtiqueta||[]).map(function(x){return [x.categoria,x.etiqueta,x.in,x.out,x.cancel];}));
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(pe), 'Projetos por etiqueta');
-      var cp=[['Card','Evento','Data','Tipo','Projetos','Logo','Site tradicional','E-commerce','Outros','Etiquetas','Revisar']].concat(p.detalhe.map(function(x){return [x.card,TIPO[x.tipoEvento],R.fmtFull(x.data),x.classe,x.projetosConfirmados,x.logo,x.site,x.ecommerce,x.outros,(x.etiquetas||[]).join(' | '),x.precisaClassificar?'SIM':'NÃO'];}));
+      var cp=[['Card','Evento','Data','Tipo','Projetos','Logo','Site tradicional','E-commerce','Outros','Etiquetas','Revisar','ID card (Trello)','ID ação (Trello)']].concat(p.detalhe.map(function(x){return [x.card,TIPO[x.tipoEvento],R.fmtFull(x.data),x.classe,x.projetosConfirmados,x.logo,x.site,x.ecommerce,x.outros,(x.etiquetas||[]).join(' | '),x.precisaClassificar?'SIM':'NÃO',x.cardId||'',x.actionId||''];}));
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(cp), 'Classificação projetos');
     }
 
-    var cab = ['Nº do cliente', 'Nome', 'Card', 'Situação', 'Entrada', 'Saída', 'Tempo no board', 'Horas', 'Destino / etapa'];
+    var cab = ['Nº do cliente', 'Nome', 'Card', 'Situação', 'Entrada', 'Saída', 'Tempo no board', 'Horas', 'Destino / etapa','ID card (Trello)','ID ação de saída','ID ação de entrada'];
     d.colunas.forEach(function (c) { cab.push('Tempo em: ' + c.nome); });
     var cli = [cab].concat(d.clientes.map(function (c) {
       var l = [c.numero, c.nome, c.card, SITUACAO[c.situacao], R.fmtFull(c.entrada), R.fmtFull(c.saida), R.fmtTempo(c.ms), R.horas(c.ms),
-               c.situacao === 'out' ? c.destino : 'Desistiu em: ' + (c.etapa || '—')];
+               c.situacao === 'out' ? c.destino : 'Desistiu em: ' + (c.etapa || '—'),c.id||'',c.saidaActionId||'',c.entradaActionId||''];
       d.colunas.forEach(function (col) { var x = c.colunas && c.colunas[col.id]; l.push(x && x.ms > 0 ? R.fmtTempo(x.ms) : ''); });
       return l;
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(cli), 'Clientes');
 
-    var cards = [['Data', 'Hora', 'Tipo', 'Motivo', 'Card', 'Lista de origem', 'Lista de destino', 'Responsável', 'Observação']]
-      .concat(d.cards.map(function (c) { return [R.fmtFull(c.date), R.fmtHora(c.date), TIPO[c.tipo], c.motivo, c.card, c.origem, c.destino, c.quem, c.obs || '']; }));
+    var cards = [['Data', 'Hora', 'Tipo', 'Motivo', 'Card', 'Lista de origem', 'Lista de destino', 'Responsável', 'Observação','ID card (Trello)','ID ação (Trello)','Data UTC original']]
+      .concat(d.cards.map(function (c) { return [R.fmtFull(c.date), R.fmtHora(c.date), TIPO[c.tipo], c.motivo, c.card, c.origem, c.destino, c.quem, c.obs || '',c.cardId||'',c.actionId||'',c.dataUTC||'']; }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(cards), 'Cards');
 
     if (d.pendentes.length) {
@@ -420,6 +436,8 @@
         .concat(d.ignorados.map(function (e) { return [R.fmtFull(e.date), TIPO[e.tipo], e.card, e.motivo, e.porque]; }));
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ig), 'Ignorados');
     }
+    var aud=[['Data local','Data UTC (ISO)','Card','ID card (Trello)','ID ação (Trello)','Ação API','Tipo fluxo','Situação','Contabilizado?','Justificativa','Lista origem','Destino','ID board origem','ID board destino','Decisão manual']].concat((d.auditoriaEventos||[]).map(function(e){return [R.fmtFull(e.data)+' '+R.fmtHora(e.data),e.dataUTC,e.card,e.cardId,e.actionId,e.acaoAPI,TIPO[e.tipo]||e.tipo,e.estado,e.contado?'SIM':'NÃO',e.motivo,e.origem,e.destino,e.boardOrigemId,e.boardDestinoId,e.decisao];}));
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(aud),'Auditoria eventos');
     XLSX.writeFile(wb, nome);
   };
 
