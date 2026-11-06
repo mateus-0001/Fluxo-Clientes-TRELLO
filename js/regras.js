@@ -159,6 +159,7 @@
           status[id] = ev.tipo;
           var ent = ultEntrada[id];
           ev.ref = ent ? ent.when : (ev.criacao || null);
+          ev.entradaActionId = ent && ent.a ? ent.a.id : '';
           var copia = ent && ent.c && ent.c.copia;
           if (ent && ent.c && ent.c.copiaInterna && ent.ign === MOTIVO_COPIA_INTERNA) { ent.ign = null; addPend(ent, PEND_COPIA_INTERNA); }
           // cópia enviada a outro board é um projeto adicional legítimo: não entra na regra de engano
@@ -315,6 +316,8 @@
       var ids = (cardLabels && cardLabels[ev.id]) || [];
       lista.push({
         id: ev.id,
+        saidaActionId: (ev.a && ev.a.id) || '',
+        entradaActionId: ev.entradaActionId || '',
         situacao: ev.tipo,
         numero: p.numero, nome: p.nome, card: ev.card.name || '(sem nome)',
         entrada: ref, saida: ev.when, ms: Math.max(0, ev.when - ref),
