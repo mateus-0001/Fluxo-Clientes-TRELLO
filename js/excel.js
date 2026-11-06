@@ -209,12 +209,14 @@
         ['Projetos encaminhados identificados', pr.projetosConfirmados.out],
         ['Logos recebidos / encaminhados', pr.logo.in + ' / ' + pr.logo.out],
         ['Sites tradicionais recebidos / encaminhados', pr.site.in + ' / ' + pr.site.out],
-        ['E-commerce recebidos / encaminhados', pr.ecommerce.in + ' / ' + pr.ecommerce.out]
+        ['E-commerce recebidos / encaminhados', pr.ecommerce.in + ' / ' + pr.ecommerce.out],
+        ['Combos (com etiqueta) recebidos / encaminhados', (pr.combosEtiqueta || {in:0,out:0}).in + ' / ' + (pr.combosEtiqueta || {in:0,out:0}).out]
       ];
       // Exibir 'Outros' apenas quando existir projeto independente nessa categoria.
       // Adicionais isolados permanecem visiveis na classificacao detalhada.
       var temOutros = !!(pr.outros.in || pr.outros.out || pr.outros.cancel);
-      if (temOutros) indicadores.push(['Outros recebidos / encaminhados', pr.outros.in + ' / ' + pr.outros.out]);
+      // Os 8 cartões ficam reservados às métricas principais e combos.
+      // Se houver 'Outros', permanece na tabela por categoria abaixo.
       indicadores.forEach(function (it,i){caixaProjeto(i,it[0],it[1],i===2?COR.verde:i===3?COR.azul:COR.navy);});
       var pendencia = pr.semClassificacao.in + pr.semClassificacao.out + pr.semClassificacao.cancel;
       wsProjetos.mergeCells('A12:H12');
@@ -236,6 +238,12 @@
       linhasTabela(wsProjetos,16,tipos,[null,'0','0','0']);
       var linhaTotal = 15 + tipos.length;
       for (var tt=1;tt<=4;tt++) { var cel=wsProjetos.getCell(linhaTotal,tt); preencher(cel,COR.azulL);cel.font={name:'Calibri',bold:true,color:{argb:COR.navy}}; }
+      wsProjetos.mergeCells('A21:H21');
+      var notaCombo = wsProjetos.getCell('A21');
+      notaCombo.value = 'Combos com etiqueta: ' + (pr.combosEtiqueta || {in:0,out:0}).in + ' recebidos / ' + (pr.combosEtiqueta || {in:0,out:0}).out + ' encaminhados. Cada combo já está incluído como logo + site/e-commerce nos totais acima; não somar novamente.';
+      notaCombo.font={name:'Calibri',size:10,italic:true,color:{argb:COR.cinza}};
+      notaCombo.alignment={wrapText:true,vertical:'middle'};
+      wsProjetos.getRow(21).height=32;
       wsProjetos.mergeCells('A23:H23');
       wsProjetos.getCell('A23').value='Controle de classificação';
       wsProjetos.getCell('A23').font={name:'Calibri',bold:true,size:12,color:{argb:COR.navy}};
@@ -406,6 +414,7 @@
         ['Projetos identificados',p.projetosConfirmados.in,p.projetosConfirmados.out,p.projetosConfirmados.cancel],
         ['Logos',p.logo.in,p.logo.out,p.logo.cancel],['Sites tradicionais',p.site.in,p.site.out,p.site.cancel],
         ['E-commerce',p.ecommerce.in,p.ecommerce.out,p.ecommerce.cancel],
+        ['Combos (etiqueta COMBO; já incluídos nos projetos)',(p.combosEtiqueta || {in:0,out:0,cancel:0}).in,(p.combosEtiqueta || {in:0,out:0,cancel:0}).out,(p.combosEtiqueta || {in:0,out:0,cancel:0}).cancel],
         ['Sem classificação',p.semClassificacao.in,p.semClassificacao.out,p.semClassificacao.cancel],
         ['Clientes únicos identificados',p.clientesUnicos]];
       if (p.outros.in || p.outros.out || p.outros.cancel) {
