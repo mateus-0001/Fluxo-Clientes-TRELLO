@@ -17,7 +17,9 @@
     // Adicionais isolados sao acompanhados separadamente mas nao sao projetos contados.
     if (/^(?:ADICIONAL(?:\b|$)|FLYER ADICIONAL\b|OPORTUNIDADE DE ADICIONAL\b)/.test(s)) return 'adicional';
     // Outros produtos independentes, diferentes de adicionais.
-    if (/^(?:ARTE DE EMBALAGEM|PACK DE POSTS|PACK DE [0-9]+ POSTS?|CARTAO DE VISITAS?|CARTAO FIDELIDAD|SO VETORIZACAO|PLUGIN DE CHATBOT NA WEB|EMAIL PROFISSIONAL|CORREO PROFESIONAL)(?:\b|$)/.test(s)) return 'outro';
+    if (/^(?:ARTE DE EMBALAGEM|PACK DE POSTS|PACK DE [0-9]+ POSTS?|CARTAO DE VISITAS?|CARTAO FIDELIDAD|SO VETORIZACAO|PLUGIN DE CHATBOT NA WEB)(?:\b|$)/.test(s)) return 'outro';
+    // E-mail profissional e correio profissional sao ADICIONAIS, nunca projetos.
+    if (/^(?:EMAIL PROFISSIONAL|CORREO PROFESIONAL|CORREO PROFISSIONAL|E MAIL PROFISSIONAL)(?:\b|$)/.test(s)) return 'adicional';
 
     // Etiquetas de fluxo, comunicacao, pagamento, equipe e produtos adicionais
     // nunca definem sozinhas o servico principal.
@@ -140,7 +142,8 @@
       detalhe.push({card:(ev.card && ev.card.name)||'',tipoEvento:ev.tipo,data:ev.when,
         classe:cl.tipo,projetosConfirmados:cl.confiavel?cl.total:0,
         logo:cl.logo,site:cl.site,ecommerce:cl.ecommerce,outros:cl.outros,etiquetas:ls,
-        componentes:cl.componentes,precisaClassificar:!cl.confiavel,cardId:ev.id});
+        componentes:cl.componentes,precisaClassificar:!cl.confiavel,cardId:ev.id,
+        actionId:(ev.a && ev.a.id) || ''});
     });
     var porEtiqueta = Object.keys(agrupados).map(function (k) {return agrupados[k];});
     porEtiqueta.sort(function (a,b) {
