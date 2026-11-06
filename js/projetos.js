@@ -108,6 +108,9 @@
     var total = {in:0,out:0,cancel:0}, logo = {in:0,out:0,cancel:0},
       site = {in:0,out:0,cancel:0}, ecommerce = {in:0,out:0,cancel:0}, outros = {in:0,out:0,cancel:0};
     var naoIdentificados = {in:0,out:0,cancel:0}, doisSemTipo = {in:0,out:0,cancel:0};
+    // Contagem informativa: SOMENTE cards com etiqueta contendo a palavra COMBO.
+    // Nao presumir combo por existir logo + site sem essa etiqueta.
+    var combosEtiqueta = {in:0,out:0,cancel:0};
     var agrupados = {}, eventosPorTag = {};
     (eventos || []).forEach(function (ev) {
       if (ev.ign || !Object.prototype.hasOwnProperty.call(total,ev.tipo)) return;
@@ -116,6 +119,8 @@
       ls = ls.concat(externos).filter(Boolean);
       var info = cardInfo && cardInfo[ev.id];
       var cl = P.classificar(ls, ev.doisProjetos);
+      var temTagCombo = ls.some(function (tag) { return /\bCOMBO\b/.test(norm(tag)); });
+      if (temTagCombo) combosEtiqueta[ev.tipo]++;
       var num = R.partirNome((ev.card && ev.card.name) || (info && info.name) || '').numero;
       if (ev.tipo === 'in') { if (num) numeros[num] = 1; else semNumero++; }
       if (!cl.confiavel) {
@@ -142,7 +147,7 @@
       detalhe.push({card:(ev.card && ev.card.name)||'',tipoEvento:ev.tipo,data:ev.when,
         classe:cl.tipo,projetosConfirmados:cl.confiavel?cl.total:0,
         logo:cl.logo,site:cl.site,ecommerce:cl.ecommerce,outros:cl.outros,etiquetas:ls,
-        componentes:cl.componentes,precisaClassificar:!cl.confiavel,cardId:ev.id,
+        componentes:cl.componentes,temTagCombo:temTagCombo,precisaClassificar:!cl.confiavel,cardId:ev.id,
         actionId:(ev.a && ev.a.id) || ''});
     });
     var porEtiqueta = Object.keys(agrupados).map(function (k) {return agrupados[k];});
@@ -151,7 +156,7 @@
     });
     return {atendimentos:R.contar(eventos),clientesUnicos:Object.keys(numeros).length,
       semIdentificador:semNumero,projetosConfirmados:total,logo:logo,site:site,ecommerce:ecommerce,outros:outros,
-      semClassificacao:naoIdentificados,doisSemTipo:doisSemTipo,
+      semClassificacao:naoIdentificados,doisSemTipo:doisSemTipo,combosEtiqueta:combosEtiqueta,
       detalhe:detalhe,porEtiqueta:porEtiqueta,
       nota:'Projetos classificados pelas etiquetas comerciais atualmente acessiveis. Etiquetas atuais nao provam a classificacao historica.'};
   };
