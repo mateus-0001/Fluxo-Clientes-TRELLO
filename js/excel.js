@@ -185,21 +185,44 @@
         ['Projetos identificados', p.projetosConfirmados.in, p.projetosConfirmados.out, p.projetosConfirmados.cancel],
         ['Logos identificados', p.logo.in, p.logo.out, p.logo.cancel],
         ['Sites identificados', p.site.in, p.site.out, p.site.cancel],
+        ['Outros projetos identificados', p.outros.in, p.outros.out, p.outros.cancel],
         ['Cards sem classificação', p.semClassificacao.in, p.semClassificacao.out, p.semClassificacao.cancel],
         ['Dois projetos com tipos indefinidos', p.doisSemTipo.in, p.doisSemTipo.out, p.doisSemTipo.cancel]
       ];
-      abaDados(wb, 'Projetos', COR.verde, 'Clientes, atendimentos e projetos',
+      var wsProjetos = abaDados(wb, 'Projetos', COR.verde, 'Clientes, atendimentos e projetos',
         sub + ' | Clientes únicos identificados nas entradas: ' + p.clientesUnicos +
         ' | Entradas sem número: ' + p.semIdentificador +
         ' | Projetos são parciais quando falta etiqueta explícita.',
         ['Indicador', 'Entradas', 'Saídas', 'Cancelamentos'], linhasPr,
         { fmts: [null, '0', '0', '0'], aligns: ['left','right','right','right'], min: 18 });
+      // Resumo por categoria diretamente na aba Projetos.
+      var linhaResumo = 4 + linhasPr.length + 3;
+      wsProjetos.getCell(linhaResumo, 1).value = 'Resumo de projetos por tipo';
+      wsProjetos.getCell(linhaResumo, 1).font = { name: 'Calibri', bold:true, size:12, color:{argb: COR.navy} };
+      cabecalho(wsProjetos, linhaResumo + 1, ['Categoria', 'Recebidos', 'Encaminhados', 'Cancelados']);
+      var tipos = [
+        ['Logo',p.logo.in,p.logo.out,p.logo.cancel],
+        ['Site / e-commerce',p.site.in,p.site.out,p.site.cancel],
+        ['Outros',p.outros.in,p.outros.out,p.outros.cancel],
+        ['TOTAL IDENTIFICADO',p.projetosConfirmados.in,p.projetosConfirmados.out,p.projetosConfirmados.cancel]
+      ];
+      linhasTabela(wsProjetos, linhaResumo+2, tipos, [null,'0','0','0']);
+      tipos[3].forEach(function (_x, col) {
+        var c = wsProjetos.getCell(linhaResumo+5,col+1);
+        c.font={name:'Calibri',bold:true,color:{argb:COR.navy}};
+        preencher(c,COR.azulL);
+      });
+      abaDados(wb, 'Projetos por etiqueta', COR.azul, 'Projetos por categoria e etiqueta',
+        sub + ' | COMBO = 1 logo + 1 site; cada projeto entra uma vez nos totais.',
+        ['Categoria', 'Etiqueta comercial', 'Recebidos', 'Encaminhados', 'Cancelados'],
+        (p.porEtiqueta || []).map(function(x){return [x.categoria,x.etiqueta,x.in,x.out,x.cancel];}),
+        {fmts:[null,null,'0','0','0'],min:16,max:52});
       abaDados(wb, 'Classificação projetos', COR.laranja, 'Auditoria de identificação dos projetos',
         'A classificação usa etiquetas atuais. Cards de outros quadros podem ficar sem etiqueta na triagem.',
-        ['Card', 'Evento', 'Data', 'Tipo identificado', 'Projetos identificados', 'Logo', 'Site', 'Precisa classificar'],
+        ['Card', 'Evento', 'Data', 'Tipo identificado', 'Projetos identificados', 'Logo', 'Site', 'Outros', 'Etiquetas encontradas', 'Precisa classificar'],
         p.detalhe.map(function (x) { return [x.card, TIPO[x.tipoEvento], loc(x.data), x.classe,
-          x.projetosConfirmados, x.logo, x.site, x.precisaClassificar ? 'SIM' : 'NÃO']; }),
-        { fmts:[null,null,FMT_DATAHORA,'0','0','0','0',null], max:60 });
+          x.projetosConfirmados, x.logo, x.site, x.outros, (x.etiquetas || []).join(' | '), x.precisaClassificar ? 'SIM' : 'NÃO']; }),
+        { fmts:[null,null,FMT_DATAHORA,null,'0','0','0','0',null,null], max:60 });
     }
 
     // ===== Por etiqueta =====
@@ -332,9 +355,14 @@
       var pr=[['Indicador','Entradas','Saídas','Cancelamentos'],['Atendimentos',p.atendimentos.in,p.atendimentos.out,p.atendimentos.cancel],
         ['Projetos identificados',p.projetosConfirmados.in,p.projetosConfirmados.out,p.projetosConfirmados.cancel],
         ['Logos',p.logo.in,p.logo.out,p.logo.cancel],['Sites',p.site.in,p.site.out,p.site.cancel],
+        ['Outros',p.outros.in,p.outros.out,p.outros.cancel],
         ['Sem classificação',p.semClassificacao.in,p.semClassificacao.out,p.semClassificacao.cancel],
         ['Clientes únicos identificados',p.clientesUnicos]];
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(pr), 'Projetos');
+      var pe=[['Categoria','Etiqueta comercial','Recebidos','Encaminhados','Cancelados']].concat((p.porEtiqueta||[]).map(function(x){return [x.categoria,x.etiqueta,x.in,x.out,x.cancel];}));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(pe), 'Projetos por etiqueta');
+      var cp=[['Card','Evento','Data','Tipo','Projetos','Logo','Site','Outros','Etiquetas','Revisar']].concat(p.detalhe.map(function(x){return [x.card,TIPO[x.tipoEvento],R.fmtFull(x.data),x.classe,x.projetosConfirmados,x.logo,x.site,x.outros,(x.etiquetas||[]).join(' | '),x.precisaClassificar?'SIM':'NÃO'];}));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(cp), 'Classificação projetos');
     }
 
     var cab = ['Nº do cliente', 'Nome', 'Card', 'Situação', 'Entrada', 'Saída', 'Tempo no board', 'Horas', 'Destino / etapa'];
