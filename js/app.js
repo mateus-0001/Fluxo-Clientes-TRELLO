@@ -481,13 +481,16 @@
       '<div><span>Projetos recebidos identificados</span>' + numero(p.projetosConfirmados.in) + '</div>' +
       '<div><span>Projetos encaminhados identificados</span>' + numero(p.projetosConfirmados.out) + '</div>' +
       '<div><span>Logos recebidos / encaminhados</span>' + numero(p.logo.in + ' / ' + p.logo.out) + '</div>' +
-      '<div><span>Sites recebidos / encaminhados</span>' + numero(p.site.in + ' / ' + p.site.out) + '</div>' +
+      '<div><span>Sites tradicionais recebidos / encaminhados</span>' + numero(p.site.in + ' / ' + p.site.out) + '</div>' +
+      '<div><span>E-commerce recebidos / encaminhados</span>' + numero(p.ecommerce.in + ' / ' + p.ecommerce.out) + '</div>' +
       '<div><span>Outros recebidos / encaminhados</span>' + numero(p.outros.in + ' / ' + p.outros.out) + '</div>' +
       '</div>' +
-      '<p class="muted">Sem classificação segura: ' + p.semClassificacao.in + ' entradas e ' +
-      p.semClassificacao.out + ' saídas. Desses, ' + p.doisSemTipo.in +
-      ' recebimentos possuem indício de 2 projetos sem tipo definido. ' +
-      p.semIdentificador + ' entradas não têm número identificável. <b>Os totais de projetos são parciais</b> até classificar esses casos. Consulte a aba Classificação projetos do Excel para ver quais cards e etiquetas precisam de revisão.</p>';
+      ((p.semClassificacao.in + p.semClassificacao.out + p.semClassificacao.cancel) ?
+        '<p class="muted">Sem classificação segura: ' + p.semClassificacao.in + ' entradas e ' +
+        p.semClassificacao.out + ' saídas. Desses, ' + p.doisSemTipo.in +
+        ' recebimentos possuem indício de 2 projetos sem tipo definido. ' +
+        p.semIdentificador + ' entradas não têm número identificável. <b>Os totais de projetos são parciais</b> até classificar esses casos. Consulte a aba Classificação projetos do Excel.</p>' :
+        '<p class="muted">Todas as entradas e saídas contabilizadas foram classificadas por tipo de projeto (ou identificadas como adicionais desconsiderados). A classificação utiliza as etiquetas atualmente acessíveis.</p>');
   }
 
   function maxDe(lista, f) { return lista.reduce(function (m, x) { return Math.max(m, f(x)); }, 0); }
