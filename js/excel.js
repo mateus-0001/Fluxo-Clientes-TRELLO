@@ -210,7 +210,7 @@
         ['Logos recebidos / encaminhados', pr.logo.in + ' / ' + pr.logo.out],
         ['Sites tradicionais recebidos / encaminhados', pr.site.in + ' / ' + pr.site.out],
         ['E-commerce recebidos / encaminhados', pr.ecommerce.in + ' / ' + pr.ecommerce.out],
-        ['Combos (com etiqueta) recebidos / encaminhados', (pr.combosEtiqueta || {in:0,out:0}).in + ' / ' + (pr.combosEtiqueta || {in:0,out:0}).out]
+        ['Combos recebidos / encaminhados', (pr.combosEtiqueta || {in:0,out:0}).in + ' / ' + (pr.combosEtiqueta || {in:0,out:0}).out]
       ];
       // Exibir 'Outros' apenas quando existir projeto independente nessa categoria.
       // Adicionais isolados permanecem visiveis na classificacao detalhada.
@@ -240,7 +240,7 @@
       for (var tt=1;tt<=4;tt++) { var cel=wsProjetos.getCell(linhaTotal,tt); preencher(cel,COR.azulL);cel.font={name:'Calibri',bold:true,color:{argb:COR.navy}}; }
       wsProjetos.mergeCells('A21:H21');
       var notaCombo = wsProjetos.getCell('A21');
-      notaCombo.value = 'Combos com etiqueta: ' + (pr.combosEtiqueta || {in:0,out:0}).in + ' recebidos / ' + (pr.combosEtiqueta || {in:0,out:0}).out + ' encaminhados. Cada combo já está incluído como logo + site/e-commerce nos totais acima; não somar novamente.';
+      notaCombo.value = 'Combos identificados (etiqueta COMBO ou logo + site/e-commerce): ' + (pr.combosEtiqueta || {in:0,out:0}).in + ' recebidos / ' + (pr.combosEtiqueta || {in:0,out:0}).out + ' encaminhados. Cada combo já está incluído como logo + site/e-commerce nos totais acima; não somar novamente.';
       notaCombo.font={name:'Calibri',size:10,italic:true,color:{argb:COR.cinza}};
       notaCombo.alignment={wrapText:true,vertical:'middle'};
       wsProjetos.getRow(21).height=32;
@@ -414,7 +414,7 @@
         ['Projetos identificados',p.projetosConfirmados.in,p.projetosConfirmados.out,p.projetosConfirmados.cancel],
         ['Logos',p.logo.in,p.logo.out,p.logo.cancel],['Sites tradicionais',p.site.in,p.site.out,p.site.cancel],
         ['E-commerce',p.ecommerce.in,p.ecommerce.out,p.ecommerce.cancel],
-        ['Combos (etiqueta COMBO; já incluídos nos projetos)',(p.combosEtiqueta || {in:0,out:0,cancel:0}).in,(p.combosEtiqueta || {in:0,out:0,cancel:0}).out,(p.combosEtiqueta || {in:0,out:0,cancel:0}).cancel],
+        ['Combos (etiqueta COMBO ou logo + site; já incluídos nos projetos)',(p.combosEtiqueta || {in:0,out:0,cancel:0}).in,(p.combosEtiqueta || {in:0,out:0,cancel:0}).out,(p.combosEtiqueta || {in:0,out:0,cancel:0}).cancel],
         ['Sem classificação',p.semClassificacao.in,p.semClassificacao.out,p.semClassificacao.cancel],
         ['Clientes únicos identificados',p.clientesUnicos]];
       if (p.outros.in || p.outros.out || p.outros.cancel) {
