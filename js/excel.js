@@ -209,9 +209,12 @@
         ['Projetos encaminhados identificados', pr.projetosConfirmados.out],
         ['Logos recebidos / encaminhados', pr.logo.in + ' / ' + pr.logo.out],
         ['Sites tradicionais recebidos / encaminhados', pr.site.in + ' / ' + pr.site.out],
-        ['E-commerce recebidos / encaminhados', pr.ecommerce.in + ' / ' + pr.ecommerce.out],
-        ['Outros recebidos / encaminhados', pr.outros.in + ' / ' + pr.outros.out]
+        ['E-commerce recebidos / encaminhados', pr.ecommerce.in + ' / ' + pr.ecommerce.out]
       ];
+      // Exibir 'Outros' apenas quando existir projeto independente nessa categoria.
+      // Adicionais isolados permanecem visiveis na classificacao detalhada.
+      var temOutros = !!(pr.outros.in || pr.outros.out || pr.outros.cancel);
+      if (temOutros) indicadores.push(['Outros recebidos / encaminhados', pr.outros.in + ' / ' + pr.outros.out]);
       indicadores.forEach(function (it,i){caixaProjeto(i,it[0],it[1],i===2?COR.verde:i===3?COR.azul:COR.navy);});
       var pendencia = pr.semClassificacao.in + pr.semClassificacao.out + pr.semClassificacao.cancel;
       wsProjetos.mergeCells('A12:H12');
@@ -226,12 +229,13 @@
       var tipos = [
         ['Logo',pr.logo.in,pr.logo.out,pr.logo.cancel],
         ['Site tradicional',pr.site.in,pr.site.out,pr.site.cancel],
-        ['E-commerce',pr.ecommerce.in,pr.ecommerce.out,pr.ecommerce.cancel],
-        ['Outros',pr.outros.in,pr.outros.out,pr.outros.cancel],
-        ['TOTAL IDENTIFICADO',pr.projetosConfirmados.in,pr.projetosConfirmados.out,pr.projetosConfirmados.cancel]
+        ['E-commerce',pr.ecommerce.in,pr.ecommerce.out,pr.ecommerce.cancel]
       ];
+      if (temOutros) tipos.push(['Outros',pr.outros.in,pr.outros.out,pr.outros.cancel]);
+      tipos.push(['TOTAL IDENTIFICADO',pr.projetosConfirmados.in,pr.projetosConfirmados.out,pr.projetosConfirmados.cancel]);
       linhasTabela(wsProjetos,16,tipos,[null,'0','0','0']);
-      for (var tt=1;tt<=4;tt++) { var cel=wsProjetos.getCell(20,tt); preencher(cel,COR.azulL);cel.font={name:'Calibri',bold:true,color:{argb:COR.navy}}; }
+      var linhaTotal = 15 + tipos.length;
+      for (var tt=1;tt<=4;tt++) { var cel=wsProjetos.getCell(linhaTotal,tt); preencher(cel,COR.azulL);cel.font={name:'Calibri',bold:true,color:{argb:COR.navy}}; }
       wsProjetos.mergeCells('A23:H23');
       wsProjetos.getCell('A23').value='Controle de classificação';
       wsProjetos.getCell('A23').font={name:'Calibri',bold:true,size:12,color:{argb:COR.navy}};
@@ -402,9 +406,11 @@
         ['Projetos identificados',p.projetosConfirmados.in,p.projetosConfirmados.out,p.projetosConfirmados.cancel],
         ['Logos',p.logo.in,p.logo.out,p.logo.cancel],['Sites tradicionais',p.site.in,p.site.out,p.site.cancel],
         ['E-commerce',p.ecommerce.in,p.ecommerce.out,p.ecommerce.cancel],
-        ['Outros',p.outros.in,p.outros.out,p.outros.cancel],
         ['Sem classificação',p.semClassificacao.in,p.semClassificacao.out,p.semClassificacao.cancel],
         ['Clientes únicos identificados',p.clientesUnicos]];
+      if (p.outros.in || p.outros.out || p.outros.cancel) {
+        pr.splice(6, 0, ['Outros',p.outros.in,p.outros.out,p.outros.cancel]);
+      }
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(pr), 'Projetos');
       var pe=[['Categoria','Etiqueta comercial','Recebidos','Encaminhados','Cancelados']].concat((p.porEtiqueta||[]).map(function(x){return [x.categoria,x.etiqueta,x.in,x.out,x.cancel];}));
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(pe), 'Projetos por etiqueta');
