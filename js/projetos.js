@@ -108,8 +108,8 @@
     var total = {in:0,out:0,cancel:0}, logo = {in:0,out:0,cancel:0},
       site = {in:0,out:0,cancel:0}, ecommerce = {in:0,out:0,cancel:0}, outros = {in:0,out:0,cancel:0};
     var naoIdentificados = {in:0,out:0,cancel:0}, doisSemTipo = {in:0,out:0,cancel:0};
-    // Contagem informativa: SOMENTE cards com etiqueta contendo a palavra COMBO.
-    // Nao presumir combo por existir logo + site sem essa etiqueta.
+    // Contagem informativa: cards com COMBO na etiqueta OU com etiquetas de Logo e Site/E-commerce.
+    // Cada atendimento combinado conta uma vez, sem acrescentar projetos ao total.
     var combosEtiqueta = {in:0,out:0,cancel:0};
     var agrupados = {}, eventosPorTag = {};
     (eventos || []).forEach(function (ev) {
@@ -120,7 +120,8 @@
       var info = cardInfo && cardInfo[ev.id];
       var cl = P.classificar(ls, ev.doisProjetos);
       var temTagCombo = ls.some(function (tag) { return /\bCOMBO\b/.test(norm(tag)); });
-      if (temTagCombo) combosEtiqueta[ev.tipo]++;
+      var temComboIdentificado = cl.confiavel && cl.tipo === 'combo';
+      if (temComboIdentificado) combosEtiqueta[ev.tipo]++;
       var num = R.partirNome((ev.card && ev.card.name) || (info && info.name) || '').numero;
       if (ev.tipo === 'in') { if (num) numeros[num] = 1; else semNumero++; }
       if (!cl.confiavel) {
@@ -147,7 +148,7 @@
       detalhe.push({card:(ev.card && ev.card.name)||'',tipoEvento:ev.tipo,data:ev.when,
         classe:cl.tipo,projetosConfirmados:cl.confiavel?cl.total:0,
         logo:cl.logo,site:cl.site,ecommerce:cl.ecommerce,outros:cl.outros,etiquetas:ls,
-        componentes:cl.componentes,temTagCombo:temTagCombo,precisaClassificar:!cl.confiavel,cardId:ev.id,
+        componentes:cl.componentes,temTagCombo:temTagCombo,temComboIdentificado:temComboIdentificado,precisaClassificar:!cl.confiavel,cardId:ev.id,
         actionId:(ev.a && ev.a.id) || ''});
     });
     var porEtiqueta = Object.keys(agrupados).map(function (k) {return agrupados[k];});
