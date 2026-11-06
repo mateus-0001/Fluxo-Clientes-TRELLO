@@ -224,12 +224,38 @@
       return { date: ev.when, tipo: ev.tipo, motivo: ev.c.motivo, card: ev.card.name || '(sem nome)', link: urlCard(ev.card),
                origem: ev.c.origem, destino: ev.c.destino,
                quem: (ev.a.memberCreator && ev.a.memberCreator.fullName) || '',
+               cardId: ev.id, actionId: ev.a && ev.a.id || '', dataUTC: ev.a && ev.a.date || '',
                obs: ev.decidido ? 'Confirmado por você: ' + (ev.decidido === 'c' ? 'conta' : 'não conta')
                   : (ev.pend && ev.pend.length ? 'Pendente: ' + ev.pend.join(' · ') : '') };
     }).sort(function (a, b) { return b.date - a.date; });
 
+    // Trilha de auditoria: cada evento que o Trello classificou na janela,
+    // incluindo ignorados, pendentes e eventos suprimidos pela deduplicacao.
+    // A chave permanente e (ID da acao), nao o telefone nem o nome do card.
+    var processados = {};
+    kept.forEach(function (ev) { if (ev.a && ev.a.id) processados[ev.a.id] = true; });
+    var auditoriaEventos = evs.filter(noAtual).map(function (ev) {
+      var a = ev.a || {}, d = a.data || {}, motivo = '';
+      var valido = !!processados[a.id] && !ev.ign;
+      var estado = !processados[a.id] ? 'NAO PROCESSADO (regra de estado / duplicado)' :
+        ev.ign ? 'IGNORADO' : (ev.tipo !== 'in' && ev.tipo !== 'out' && ev.tipo !== 'cancel') ?
+        'EVENTO AUXILIAR (nao conta)' : ev.pend && ev.pend.length ? 'CONTADO PROVISORIAMENTE' : 'CONTADO';
+      if (!processados[a.id]) motivo = 'Evento suprimido durante o processamento (verificar historico)';
+      else motivo = ev.ign || (ev.pend && ev.pend.join(' | ')) ||
+        (ev.decidido === 'c' ? 'Contagem confirmada manualmente' : (ev.c.motivo || ''));
+      return {
+        data: ev.when, dataUTC: a.date || '', card: ev.card && ev.card.name || '',
+        cardId: ev.id, actionId: a.id || '', acaoAPI: a.type || '', tipo: ev.tipo,
+        estado: estado, contado: valido && (ev.tipo === 'in' || ev.tipo === 'out' || ev.tipo === 'cancel'),
+        motivo: motivo, origem: ev.c.origem || '', destino: ev.c.destinoBoard || ev.c.destino || '',
+        boardOrigemId: d.boardSource && d.boardSource.id || '',
+        boardDestinoId: d.boardTarget && d.boardTarget.id || '',
+        decisao: ev.decidido || ''
+      };
+    }).sort(function (a,b) { return a.data-b.data || a.actionId.localeCompare(b.actionId); });
+
     S.res = {
-      iv: iv, kpis: kpis, projetos: P.resumir(contados, c.cardLabels, S.labels, c.cardInfo, R, c.etiquetasExternas), serieRotulo: iv.span > 31 ? 'Semana de' : 'Dia', serie: R.serie(contados, iv.span),
+      iv: iv, kpis: kpis, auditoriaEventos: auditoriaEventos, projetos: P.resumir(contados, c.cardLabels, S.labels, c.cardInfo, R, c.etiquetasExternas), serieRotulo: iv.span > 31 ? 'Semana de' : 'Dia', serie: R.serie(contados, iv.span),
       etiquetas: R.porEtiqueta(contados, clientes, c.cardLabels, S.labels, c.etiquetasExternas),
       destinos: R.destinos(contados), etapas: R.etapasDesistencia(contados),
       colunas: colunas, clientes: clientes, gargalos: R.gargalos(clientes, colunas),
@@ -613,7 +639,7 @@
       ((S.labels.filter(function (l) { return l.id === S.prefs.etiqueta; })[0] || {}).name || 'selecionada');
     var d = S.listas.filter(function (l) { return l.id === S.cfg.listaDesist; })[0];
     return 'Etiqueta: ' + et + ' · Desistentes: ' + (d ? d.name : 'não definida') +
-      ' · Enganos: ' + (S.cfg.janela ? 'ignorar até 5 min' : 'não ignorar') + ' · Nº repetido: ' + (S.cfg.dedup ? 'conta 1x por mês' : 'não verificar');
+      ' · Enganos: ' + (S.cfg.janela ? 'ignorar até 5 min' : 'não ignorar') + ' · Nº repetido: ' + (S.cfg.dedup ? 'sinalizar para revisão' : 'não verificar');
   }
   function dadosExcel() {
     var r = S.res;
@@ -622,9 +648,9 @@
       kpis: r.kpis, projetos: r.projetos, serieRotulo: r.serieRotulo,
       serie: r.serie.map(function (s) { return { rotulo: R.fmt(new Date(s.k)), in: s.in, out: s.out, cancel: s.cancel, saldo: s.saldo }; }),
       etiquetas: r.etiquetas, destinos: r.destinos, etapas: r.etapas, colunas: r.colunas, clientes: r.clientes.slice().sort(function (a, b) { return b.saida - a.saida; }), gargalos: r.gargalos,
-      cards: r.linhas,
-      pendentes: r.pendentes.map(function (ev) { return { date: ev.when, tipo: ev.tipo, card: ev.card.name || '(sem nome)', motivo: ev.c.motivo, porque: ev.pend.join(' · ') }; }),
-      ignorados: r.ignorados.map(function (ev) { return { date: ev.when, tipo: ev.tipo, card: ev.card.name || '(sem nome)', motivo: ev.c.motivo, porque: ev.ign }; }),
+      cards: r.linhas, auditoriaEventos: r.auditoriaEventos || [],
+      pendentes: r.pendentes.map(function (ev) { return { date: ev.when, tipo: ev.tipo, card: ev.card.name || '(sem nome)', motivo: ev.c.motivo, porque: ev.pend.join(' · '), cardId: ev.id, actionId: ev.a && ev.a.id || '' }; }),
+      ignorados: r.ignorados.map(function (ev) { return { date: ev.when, tipo: ev.tipo, card: ev.card.name || '(sem nome)', motivo: ev.c.motivo, porque: ev.ign, cardId: ev.id, actionId: ev.a && ev.a.id || '' }; }),
       naoContados: r.naoContados
     };
   }
