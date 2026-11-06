@@ -509,7 +509,7 @@
       '<div><span>Logos recebidos / encaminhados</span>' + numero(p.logo.in + ' / ' + p.logo.out) + '</div>' +
       '<div><span>Sites tradicionais recebidos / encaminhados</span>' + numero(p.site.in + ' / ' + p.site.out) + '</div>' +
       '<div><span>E-commerce recebidos / encaminhados</span>' + numero(p.ecommerce.in + ' / ' + p.ecommerce.out) + '</div>' +
-      '<div><span>Outros recebidos / encaminhados</span>' + numero(p.outros.in + ' / ' + p.outros.out) + '</div>' +
+      ((p.outros.in || p.outros.out || p.outros.cancel) ? '<div><span>Outros recebidos / encaminhados</span>' + numero(p.outros.in + ' / ' + p.outros.out) + '</div>' : '') +
       '</div>' +
       ((p.semClassificacao.in + p.semClassificacao.out + p.semClassificacao.cancel) ?
         '<p class="muted">Sem classificação segura: ' + p.semClassificacao.in + ' entradas e ' +
